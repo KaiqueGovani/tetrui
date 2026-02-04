@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 )
 
 type Config struct {
@@ -99,6 +100,29 @@ func insertScore(scores []ScoreEntry, entry ScoreEntry) []ScoreEntry {
 		return scores[:10]
 	}
 	return scores
+}
+
+func mergeScores(local []ScoreEntry, remote []ScoreEntry) []ScoreEntry {
+	merged := make([]ScoreEntry, 0, len(local)+len(remote))
+	seen := make(map[string]struct{})
+	for _, entry := range append(local, remote...) {
+		key := entry.Name + "|" + entry.When + "|" + strconv.Itoa(entry.Score)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		merged = append(merged, entry)
+	}
+	sort.Slice(merged, func(i, j int) bool {
+		if merged[i].Score == merged[j].Score {
+			return merged[i].When > merged[j].When
+		}
+		return merged[i].Score > merged[j].Score
+	})
+	if len(merged) > 10 {
+		return merged[:10]
+	}
+	return merged
 }
 
 func configPath() (string, error) {

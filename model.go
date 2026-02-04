@@ -20,6 +20,14 @@ const (
 
 type tickMsg struct{}
 type soundMsg struct{}
+type scoresLoadedMsg struct {
+	scores []ScoreEntry
+	err    error
+}
+
+type scoreUploadedMsg struct {
+	err error
+}
 
 type Model struct {
 	screen      Screen
@@ -33,6 +41,7 @@ type Model struct {
 	game        Game
 	nameInput   string
 	sound       *SoundEngine
+	sync        *ScoreSync
 }
 
 func NewModel() Model {
@@ -50,6 +59,7 @@ func NewModel() Model {
 		themeIndex: index,
 		game:       NewGame(),
 		sound:      NewSoundEngine(config.Sound),
+		sync:       NewScoreSyncFromEnv(),
 	}
 }
 
@@ -82,6 +92,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case soundMsg:
+		return m, nil
+	case scoresLoadedMsg:
+		if msg.err == nil && len(msg.scores) > 0 {
+			m.scores = mergeScores(m.scores, msg.scores)
+			_ = saveScores(m.scores)
+		}
+		return m, nil
+	case scoreUploadedMsg:
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -207,6 +225,9 @@ func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
 			m.screen = screenThemes
 		case 2:
 			m.screen = screenScores
+			if m.sync != nil && m.sync.Enabled() {
+				return tea.Batch(cmd, m.sync.FetchScoresCmd())
+			}
 		case 3:
 			m.screen = screenConfig
 		case 4:
@@ -373,7 +394,16 @@ func (m *Model) updateNameEntry(msg tea.KeyMsg) tea.Cmd {
 		})
 		_ = saveScores(m.scores)
 		m.screen = screenScores
-		return nil
+		var cmds []tea.Cmd
+		if m.sync != nil && m.sync.Enabled() {
+			entry := m.scores[0]
+			cmds = append(cmds, m.sync.UploadScoreCmd(entry))
+			cmds = append(cmds, m.sync.FetchScoresCmd())
+		}
+		if len(cmds) == 0 {
+			return nil
+		}
+		return tea.Batch(cmds...)
 	case tea.KeyBackspace, tea.KeyDelete:
 		if len(m.nameInput) > 0 {
 			m.nameInput = m.nameInput[:len(m.nameInput)-1]
