@@ -42,6 +42,7 @@ type Model struct {
 	nameInput   string
 	sound       *SoundEngine
 	sync        *ScoreSync
+	syncWarning string
 }
 
 func NewModel() Model {
@@ -94,12 +95,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case soundMsg:
 		return m, nil
 	case scoresLoadedMsg:
-		if msg.err == nil && len(msg.scores) > 0 {
+		if msg.err != nil {
+			m.syncWarning = "Offline: scores not synced."
+			return m, nil
+		}
+		m.syncWarning = ""
+		if len(msg.scores) > 0 {
 			m.scores = mergeScores(m.scores, msg.scores)
 			_ = saveScores(m.scores)
 		}
 		return m, nil
 	case scoreUploadedMsg:
+		if msg.err != nil {
+			m.syncWarning = "Offline: scores not synced."
+			return m, nil
+		}
+		m.syncWarning = ""
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {

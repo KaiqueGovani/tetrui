@@ -85,6 +85,11 @@ func viewScores(m Model) string {
 			b.WriteString("\n")
 		}
 	}
+	if m.syncWarning != "" {
+		b.WriteString("\n")
+		b.WriteString(helpStyle(theme).Render(m.syncWarning))
+		b.WriteString("\n")
+	}
 	b.WriteString("\n")
 	b.WriteString(helpStyle(theme).Render("Enter to back"))
 	return center(m.width, m.height, b.String())
