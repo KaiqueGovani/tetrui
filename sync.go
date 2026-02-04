@@ -18,15 +18,14 @@ type ScoreSync struct {
 	client  *http.Client
 }
 
-func NewScoreSyncFromEnv() *ScoreSync {
+func NewScoreSyncFromEnv(enabled bool) *ScoreSync {
 	baseURL := strings.TrimSpace(os.Getenv("TETRUI_SCORE_API_URL"))
 	apiKey := strings.TrimSpace(os.Getenv("TETRUI_SCORE_API_KEY"))
-	enabled := strings.EqualFold(strings.TrimSpace(os.Getenv("TETRUI_SCORE_SYNC")), "true")
-	if baseURL == "" || !enabled {
+	if baseURL == "" {
 		return nil
 	}
 	return &ScoreSync{
-		enabled: true,
+		enabled: enabled,
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
 		client: &http.Client{
@@ -37,6 +36,13 @@ func NewScoreSyncFromEnv() *ScoreSync {
 
 func (s *ScoreSync) Enabled() bool {
 	return s != nil && s.enabled
+}
+
+func (s *ScoreSync) SetEnabled(enabled bool) {
+	if s == nil {
+		return
+	}
+	s.enabled = enabled
 }
 
 func (s *ScoreSync) FetchScoresCmd() tea.Cmd {

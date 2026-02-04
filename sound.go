@@ -83,37 +83,49 @@ func (s *SoundEngine) Play(event SoundEvent) {
 type toneSpec struct {
 	frequency float64
 	duration  time.Duration
+	volume    float64
 }
 
 func tonesForEvent(event SoundEvent) []toneSpec {
 	switch event {
 	case SoundLock:
-		return []toneSpec{{frequency: 220, duration: 70 * time.Millisecond}}
+		return []toneSpec{{frequency: 220, duration: 70 * time.Millisecond, volume: 0.3}}
 	case SoundLine1:
-		return []toneSpec{{frequency: 440, duration: 90 * time.Millisecond}}
+		return []toneSpec{{frequency: 440, duration: 90 * time.Millisecond, volume: 0.3}}
 	case SoundLine2:
-		return []toneSpec{{frequency: 440, duration: 70 * time.Millisecond}, {frequency: 660, duration: 90 * time.Millisecond}}
+		return []toneSpec{
+			{frequency: 440, duration: 70 * time.Millisecond, volume: 0.3},
+			{frequency: 660, duration: 90 * time.Millisecond, volume: 0.3},
+		}
 	case SoundLine3:
-		return []toneSpec{{frequency: 440, duration: 70 * time.Millisecond}, {frequency: 660, duration: 70 * time.Millisecond}, {frequency: 880, duration: 90 * time.Millisecond}}
+		return []toneSpec{
+			{frequency: 440, duration: 70 * time.Millisecond, volume: 0.3},
+			{frequency: 660, duration: 70 * time.Millisecond, volume: 0.3},
+			{frequency: 880, duration: 90 * time.Millisecond, volume: 0.3},
+		}
 	case SoundLine4:
-		return []toneSpec{{frequency: 660, duration: 80 * time.Millisecond}, {frequency: 880, duration: 80 * time.Millisecond}, {frequency: 990, duration: 120 * time.Millisecond}}
+		return []toneSpec{
+			{frequency: 660, duration: 80 * time.Millisecond, volume: 0.3},
+			{frequency: 880, duration: 80 * time.Millisecond, volume: 0.3},
+			{frequency: 990, duration: 120 * time.Millisecond, volume: 0.3},
+		}
 	case SoundRotate:
-		return []toneSpec{{frequency: 520, duration: 40 * time.Millisecond}}
+		return []toneSpec{{frequency: 520, duration: 40 * time.Millisecond, volume: 0.25}}
 	case SoundMove:
-		return []toneSpec{{frequency: 420, duration: 25 * time.Millisecond}}
+		return []toneSpec{{frequency: 380, duration: 25 * time.Millisecond, volume: 0.18}}
 	case SoundDrop:
-		return []toneSpec{{frequency: 260, duration: 60 * time.Millisecond}}
+		return []toneSpec{{frequency: 240, duration: 55 * time.Millisecond, volume: 0.22}}
 	case SoundMenuMove:
-		return []toneSpec{{frequency: 300, duration: 30 * time.Millisecond}}
+		return []toneSpec{{frequency: 260, duration: 24 * time.Millisecond, volume: 0.16}}
 	case SoundMenuSelect:
-		return []toneSpec{{frequency: 700, duration: 80 * time.Millisecond}}
+		return []toneSpec{{frequency: 520, duration: 70 * time.Millisecond, volume: 0.2}}
 	default:
 		return nil
 	}
 }
 
 func renderToneSequence(sequence []toneSpec, sampleRate int) []byte {
-	volume := 0.3
+	baseVolume := 0.3
 	gap := 10 * time.Millisecond
 	gapSamples := int(float64(sampleRate) * gap.Seconds())
 	bytesPerSample := 4
@@ -128,6 +140,10 @@ func renderToneSequence(sequence []toneSpec, sampleRate int) []byte {
 	buffer := make([]byte, totalSamples*bytesPerSample)
 	index := 0
 	for i, spec := range sequence {
+		volume := baseVolume
+		if spec.volume > 0 {
+			volume = spec.volume
+		}
 		renderTone(buffer, index, spec, sampleRate, volume)
 		samples := int(float64(sampleRate) * spec.duration.Seconds())
 		index += samples * bytesPerSample
@@ -141,9 +157,21 @@ func renderToneSequence(sequence []toneSpec, sampleRate int) []byte {
 func renderTone(buffer []byte, start int, spec toneSpec, sampleRate int, volume float64) {
 	const maxInt16 = 1<<15 - 1
 	samples := int(float64(sampleRate) * spec.duration.Seconds())
+	fadeSamples := int(float64(sampleRate) * 0.003)
 	for i := 0; i < samples; i++ {
+		env := 1.0
+		if fadeSamples > 0 {
+			if i < fadeSamples {
+				env = float64(i) / float64(fadeSamples)
+			} else if i > samples-fadeSamples {
+				env = float64(samples-i) / float64(fadeSamples)
+			}
+			if env < 0 {
+				env = 0
+			}
+		}
 		sample := math.Sin(2 * math.Pi * spec.frequency * float64(i) / float64(sampleRate))
-		value := int16(sample * volume * maxInt16)
+		value := int16(sample * volume * env * maxInt16)
 		buffer[start+i*4] = byte(value)
 		buffer[start+i*4+1] = byte(value >> 8)
 		buffer[start+i*4+2] = byte(value)

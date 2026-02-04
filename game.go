@@ -41,9 +41,9 @@ func NewGame() Game {
 	}
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	game := Game{
-		Board:   board,
+		Board:    board,
 		HoldKind: -1,
-		rng:     rng,
+		rng:      rng,
 	}
 	game.refillBag()
 	game.Current = game.popBag()
@@ -62,13 +62,15 @@ func (g *Game) FallInterval() time.Duration {
 	return interval
 }
 
-func (g *Game) Move(dx int) {
+func (g *Game) Move(dx int) bool {
 	if g.Over || g.Paused {
-		return
+		return false
 	}
 	if !g.collides(g.X+dx, g.Y, g.Rotation) {
 		g.X += dx
+		return true
 	}
+	return false
 }
 
 func (g *Game) SoftDrop() {

@@ -108,6 +108,11 @@ func viewConfig(m Model) string {
 			items = append(items, fmt.Sprintf("%s: %s", item, state))
 		case 1:
 			items = append(items, fmt.Sprintf("%s: %dx", item, clampScale(m.config.Scale)))
+		case 2:
+			if m.config.Sync {
+				state = "ON"
+			}
+			items = append(items, fmt.Sprintf("%s: %s", item, state))
 		}
 	}
 	content := renderMenu("Config", items, m.configIndex, "Enter to toggle, Left/Right to adjust, Esc to back", theme)

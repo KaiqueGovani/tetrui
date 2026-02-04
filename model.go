@@ -60,7 +60,7 @@ func NewModel() Model {
 		themeIndex: index,
 		game:       NewGame(),
 		sound:      NewSoundEngine(config.Sound),
-		sync:       NewScoreSyncFromEnv(),
+		sync:       NewScoreSyncFromEnv(config.Sync),
 	}
 }
 
@@ -253,13 +253,11 @@ func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
 func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "left", "h":
-		m.game.Move(-1)
-		if m.config.Sound {
+		if m.game.Move(-1) && m.config.Sound {
 			return playSound(m.sound, SoundMove)
 		}
 	case "right", "l":
-		m.game.Move(1)
-		if m.config.Sound {
+		if m.game.Move(1) && m.config.Sound {
 			return playSound(m.sound, SoundMove)
 		}
 	case "down", "j":
@@ -365,6 +363,12 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 			_ = saveConfig(m.config)
 		case 1:
 			m.adjustScale(1)
+		case 2:
+			m.config.Sync = !m.config.Sync
+			if m.sync != nil {
+				m.sync.SetEnabled(m.config.Sync)
+			}
+			_ = saveConfig(m.config)
 		}
 		if m.config.Sound {
 			return playSound(m.sound, SoundMenuSelect)
@@ -440,4 +444,5 @@ var menuItems = []string{
 var configItems = []string{
 	"Sound Effects",
 	"Game Scale",
+	"Score Sync",
 }

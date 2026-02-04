@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ type Config struct {
 	Theme string `json:"theme"`
 	Sound bool   `json:"sound"`
 	Scale int    `json:"scale"`
+	Sync  bool   `json:"sync"`
 }
 
 type ScoreEntry struct {
@@ -28,6 +30,7 @@ func loadConfig() (Config, error) {
 		Theme: themes[0].Name,
 		Sound: true,
 		Scale: 1,
+		Sync:  true,
 	}
 	path, err := configPath()
 	if err != nil {
@@ -39,6 +42,9 @@ func loadConfig() (Config, error) {
 	}
 	if err := json.Unmarshal(data, &config); err != nil {
 		return config, err
+	}
+	if !bytes.Contains(data, []byte("\"sync\"")) {
+		config.Sync = true
 	}
 	if config.Theme == "" {
 		config.Theme = themes[0].Name
