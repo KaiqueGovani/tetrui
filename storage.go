@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"time"
 )
 
 type Config struct {
@@ -147,4 +148,15 @@ func scoresPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "scores.json"), nil
+}
+
+func formatAPITime(value string) string {
+	if value == "" {
+		return ""
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return value
+	}
+	return parsed.Local().Format("2006-01-02 15:04")
 }
