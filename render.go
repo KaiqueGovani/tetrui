@@ -17,6 +17,13 @@ type Theme struct {
 
 var themes = []Theme{
 	{
+		Name:        "Classic Tetris",
+		BorderColor: lipgloss.Color("15"),
+		TextColor:   lipgloss.Color("250"),
+		AccentColor: lipgloss.Color("226"),
+		PieceColors: []lipgloss.Color{"51", "226", "93", "46", "196", "21", "208"},
+	},
+	{
 		Name:        "Amber Terminal",
 		BorderColor: lipgloss.Color("214"),
 		TextColor:   lipgloss.Color("223"),
@@ -29,6 +36,13 @@ var themes = []Theme{
 		TextColor:   lipgloss.Color("159"),
 		AccentColor: lipgloss.Color("39"),
 		PieceColors: []lipgloss.Color{"45", "39", "51", "44", "50", "75", "81"},
+	},
+	{
+		Name:        "Forest CRT",
+		BorderColor: lipgloss.Color("22"),
+		TextColor:   lipgloss.Color("120"),
+		AccentColor: lipgloss.Color("34"),
+		PieceColors: []lipgloss.Color{"47", "64", "77", "48", "160", "35", "106"},
 	},
 }
 
@@ -43,46 +57,18 @@ func themeIndexByName(name string) int {
 
 func viewMenu(m Model) string {
 	theme := themes[m.themeIndex]
-	var b strings.Builder
-	b.WriteString(titleStyle(theme).Render("TETRUI"))
-	b.WriteString("\n\n")
-	for i, item := range menuItems {
-		cursor := "  "
-		if i == m.menuIndex {
-			cursor = "> "
-		}
-		line := fmt.Sprintf("%s%s", cursor, item)
-		if i == m.menuIndex {
-			line = highlightStyle(theme).Render(line)
-		}
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
-	b.WriteString(helpStyle(theme).Render("Enter to select, Q to quit"))
-	return center(m.width, m.height, b.String())
+	content := renderMenu("TETRUI", menuItems, m.menuIndex, "Enter to select, Q to quit", theme)
+	return center(m.width, m.height, content)
 }
 
 func viewThemes(m Model) string {
 	theme := themes[m.themeIndex]
-	var b strings.Builder
-	b.WriteString(titleStyle(theme).Render("Themes"))
-	b.WriteString("\n\n")
-	for i, t := range themes {
-		cursor := "  "
-		if i == m.themeIndex {
-			cursor = "> "
-		}
-		line := fmt.Sprintf("%s%s", cursor, t.Name)
-		if i == m.themeIndex {
-			line = highlightStyle(theme).Render(line)
-		}
-		b.WriteString(line)
-		b.WriteString("\n")
+	items := make([]string, 0, len(themes))
+	for _, t := range themes {
+		items = append(items, t.Name)
 	}
-	b.WriteString("\n")
-	b.WriteString(helpStyle(theme).Render("Enter to apply, Esc to back"))
-	return center(m.width, m.height, b.String())
+	content := renderMenu("Themes", items, m.themeIndex, "Enter to apply, Esc to back", theme)
+	return center(m.width, m.height, content)
 }
 
 func viewScores(m Model) string {
@@ -106,28 +92,16 @@ func viewScores(m Model) string {
 
 func viewConfig(m Model) string {
 	theme := themes[m.themeIndex]
-	var b strings.Builder
-	b.WriteString(titleStyle(theme).Render("Config"))
-	b.WriteString("\n\n")
+	items := make([]string, 0, len(configItems))
 	for i, item := range configItems {
-		cursor := "  "
-		if i == m.configIndex {
-			cursor = "> "
-		}
 		state := "OFF"
 		if i == 0 && m.config.Sound {
 			state = "ON"
 		}
-		line := fmt.Sprintf("%s%s: %s", cursor, item, state)
-		if i == m.configIndex {
-			line = highlightStyle(theme).Render(line)
-		}
-		b.WriteString(line)
-		b.WriteString("\n")
+		items = append(items, fmt.Sprintf("%s: %s", item, state))
 	}
-	b.WriteString("\n")
-	b.WriteString(helpStyle(theme).Render("Enter to toggle, Esc to back"))
-	return center(m.width, m.height, b.String())
+	content := renderMenu("Config", items, m.configIndex, "Enter to toggle, Esc to back", theme)
+	return center(m.width, m.height, content)
 }
 
 func viewNameEntry(m Model) string {
@@ -280,4 +254,37 @@ func center(width, height int, content string) string {
 		return content
 	}
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, content)
+}
+
+func renderMenu(title string, items []string, selected int, footer string, theme Theme) string {
+	maxWidth := lipgloss.Width(title)
+	lines := make([]string, 0, len(items))
+	for i, item := range items {
+		prefix := "  "
+		if i == selected {
+			prefix = "> "
+		}
+		line := fmt.Sprintf("%s%s", prefix, item)
+		lines = append(lines, line)
+		if width := lipgloss.Width(line); width > maxWidth {
+			maxWidth = width
+		}
+	}
+	if width := lipgloss.Width(footer); width > maxWidth {
+		maxWidth = width
+	}
+	lineStyle := lipgloss.NewStyle().Width(maxWidth).Align(lipgloss.Center)
+	var b strings.Builder
+	b.WriteString(lineStyle.Render(titleStyle(theme).Render(title)))
+	b.WriteString("\n\n")
+	for i, line := range lines {
+		if i == selected {
+			line = highlightStyle(theme).Render(line)
+		}
+		b.WriteString(lineStyle.Render(line))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(lineStyle.Render(helpStyle(theme).Render(footer)))
+	return b.String()
 }
