@@ -154,21 +154,31 @@ func soundEventForAction(locked bool, cleared int) (SoundEvent, bool) {
 }
 
 func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
+	var cmd tea.Cmd
 	switch msg.String() {
 	case "up", "k":
 		if m.menuIndex > 0 {
 			m.menuIndex--
+			if m.config.Sound {
+				cmd = playSound(m.sound, SoundMenuMove)
+			}
 		}
 	case "down", "j":
 		if m.menuIndex < len(menuItems)-1 {
 			m.menuIndex++
+			if m.config.Sound {
+				cmd = playSound(m.sound, SoundMenuMove)
+			}
 		}
 	case "enter":
+		if m.config.Sound {
+			cmd = playSound(m.sound, SoundMenuSelect)
+		}
 		switch m.menuIndex {
 		case 0:
 			m.game = NewGame()
 			m.screen = screenGame
-			return tickCmd(m.game.FallInterval())
+			return tea.Batch(cmd, tickCmd(m.game.FallInterval()))
 		case 1:
 			m.screen = screenThemes
 		case 2:
@@ -181,15 +191,21 @@ func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
 	case "q", "esc":
 		return tea.Quit
 	}
-	return nil
+	return cmd
 }
 
 func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "left", "h":
 		m.game.Move(-1)
+		if m.config.Sound {
+			return playSound(m.sound, SoundMove)
+		}
 	case "right", "l":
 		m.game.Move(1)
+		if m.config.Sound {
+			return playSound(m.sound, SoundMove)
+		}
 	case "down", "j":
 		m.game.SoftDrop()
 	case " ":
@@ -199,13 +215,24 @@ func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 			m.nameInput = ""
 			return nil
 		}
-		if event, ok := soundEventForAction(locked, cleared); ok && m.config.Sound {
-			return playSound(m.sound, event)
+		if m.config.Sound {
+			if cleared == 0 {
+				return playSound(m.sound, SoundDrop)
+			}
+			if event, ok := soundEventForAction(locked, cleared); ok {
+				return playSound(m.sound, event)
+			}
 		}
 	case "up", "x":
 		m.game.Rotate(1)
+		if m.config.Sound {
+			return playSound(m.sound, SoundRotate)
+		}
 	case "z":
 		m.game.Rotate(-1)
+		if m.config.Sound {
+			return playSound(m.sound, SoundRotate)
+		}
 	case "c":
 		m.game.Hold()
 	case "p":
@@ -221,15 +248,24 @@ func (m *Model) updateThemes(msg tea.KeyMsg) tea.Cmd {
 	case "up", "k":
 		if m.themeIndex > 0 {
 			m.themeIndex--
+			if m.config.Sound {
+				return playSound(m.sound, SoundMenuMove)
+			}
 		}
 	case "down", "j":
 		if m.themeIndex < len(themes)-1 {
 			m.themeIndex++
+			if m.config.Sound {
+				return playSound(m.sound, SoundMenuMove)
+			}
 		}
 	case "enter":
 		m.config.Theme = themes[m.themeIndex].Name
 		_ = saveConfig(m.config)
 		m.screen = screenMenu
+		if m.config.Sound {
+			return playSound(m.sound, SoundMenuSelect)
+		}
 	case "q", "esc":
 		m.screen = screenMenu
 	}
@@ -240,6 +276,9 @@ func (m *Model) updateScores(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "q", "esc", "enter":
 		m.screen = screenMenu
+		if m.config.Sound {
+			return playSound(m.sound, SoundMenuSelect)
+		}
 	}
 	return nil
 }
@@ -249,10 +288,16 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 	case "up", "k":
 		if m.configIndex > 0 {
 			m.configIndex--
+			if m.config.Sound {
+				return playSound(m.sound, SoundMenuMove)
+			}
 		}
 	case "down", "j":
 		if m.configIndex < len(configItems)-1 {
 			m.configIndex++
+			if m.config.Sound {
+				return playSound(m.sound, SoundMenuMove)
+			}
 		}
 	case "enter":
 		switch m.configIndex {
@@ -262,6 +307,9 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 				m.sound.SetEnabled(m.config.Sound)
 			}
 			_ = saveConfig(m.config)
+		}
+		if m.config.Sound {
+			return playSound(m.sound, SoundMenuSelect)
 		}
 	case "q", "esc":
 		m.screen = screenMenu
