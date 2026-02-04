@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -33,6 +32,7 @@ type Model struct {
 	scores      []ScoreEntry
 	game        Game
 	nameInput   string
+	sound       *SoundEngine
 }
 
 func NewModel() Model {
@@ -49,6 +49,7 @@ func NewModel() Model {
 		scores:     scores,
 		themeIndex: index,
 		game:       NewGame(),
+		sound:      NewSoundEngine(config.Sound),
 	}
 }
 
@@ -71,8 +72,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			cmds := []tea.Cmd{tickCmd(m.game.FallInterval())}
-			if m.config.Sound && (cleared > 0 || locked) {
-				cmds = append(cmds, playSound())
+			if event, ok := soundEventForAction(locked, cleared); ok && m.config.Sound {
+				cmds = append(cmds, playSound(m.sound, event))
 			}
 			return m, tea.Batch(cmds...)
 		}
@@ -124,11 +125,32 @@ func tickCmd(interval time.Duration) tea.Cmd {
 	return tea.Tick(interval, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
-func playSound() tea.Cmd {
+func playSound(engine *SoundEngine, event SoundEvent) tea.Cmd {
 	return func() tea.Msg {
-		fmt.Print("\a")
+		if engine != nil {
+			engine.Play(event)
+		}
 		return soundMsg{}
 	}
+}
+
+func soundEventForAction(locked bool, cleared int) (SoundEvent, bool) {
+	if cleared > 0 {
+		switch cleared {
+		case 1:
+			return SoundLine1, true
+		case 2:
+			return SoundLine2, true
+		case 3:
+			return SoundLine3, true
+		default:
+			return SoundLine4, true
+		}
+	}
+	if locked {
+		return SoundLock, true
+	}
+	return SoundLock, false
 }
 
 func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
@@ -177,8 +199,8 @@ func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 			m.nameInput = ""
 			return nil
 		}
-		if m.config.Sound && (cleared > 0 || locked) {
-			return playSound()
+		if event, ok := soundEventForAction(locked, cleared); ok && m.config.Sound {
+			return playSound(m.sound, event)
 		}
 	case "up", "x":
 		m.game.Rotate(1)
@@ -236,6 +258,9 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 		switch m.configIndex {
 		case 0:
 			m.config.Sound = !m.config.Sound
+			if m.sound != nil {
+				m.sound.SetEnabled(m.config.Sound)
+			}
 			_ = saveConfig(m.config)
 		}
 	case "q", "esc":
