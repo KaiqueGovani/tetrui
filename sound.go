@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"math"
 	"sync"
 	"time"
@@ -69,8 +70,12 @@ func (s *SoundEngine) Play(event SoundEvent) {
 	}
 	go func() {
 		buffer := renderToneSequence(sequence, s.sampleRate)
-		player := ctx.NewPlayer()
-		_, _ = player.Write(buffer)
+		reader := bytes.NewReader(buffer)
+		player := ctx.NewPlayer(reader)
+		player.Play()
+		for player.IsPlaying() {
+			time.Sleep(5 * time.Millisecond)
+		}
 		_ = player.Close()
 	}()
 }

@@ -290,7 +290,7 @@ func cellWidth(scale int) int {
 func renderMenu(title string, items []string, selected int, footer string, theme Theme) string {
 	maxWidth := lipgloss.Width(title)
 	lines := make([]string, 0, len(items))
-	for i, item := range items {
+	for _, item := range items {
 		lines = append(lines, item)
 		if width := lipgloss.Width(item); width > maxWidth {
 			maxWidth = width
