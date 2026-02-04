@@ -100,9 +100,9 @@ func tonesForEvent(event SoundEvent) []toneSpec {
 	case SoundRotate:
 		return []toneSpec{{frequency: 520, duration: 40 * time.Millisecond}}
 	case SoundMove:
-		return []toneSpec{{frequency: 360, duration: 30 * time.Millisecond}}
+		return []toneSpec{{frequency: 420, duration: 25 * time.Millisecond}}
 	case SoundDrop:
-		return []toneSpec{{frequency: 180, duration: 80 * time.Millisecond}}
+		return []toneSpec{{frequency: 260, duration: 60 * time.Millisecond}}
 	case SoundMenuMove:
 		return []toneSpec{{frequency: 300, duration: 30 * time.Millisecond}}
 	case SoundMenuSelect:
