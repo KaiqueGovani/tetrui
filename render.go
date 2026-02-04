@@ -95,12 +95,17 @@ func viewConfig(m Model) string {
 	items := make([]string, 0, len(configItems))
 	for i, item := range configItems {
 		state := "OFF"
-		if i == 0 && m.config.Sound {
-			state = "ON"
+		switch i {
+		case 0:
+			if m.config.Sound {
+				state = "ON"
+			}
+			items = append(items, fmt.Sprintf("%s: %s", item, state))
+		case 1:
+			items = append(items, fmt.Sprintf("%s: %dx", item, clampScale(m.config.Scale)))
 		}
-		items = append(items, fmt.Sprintf("%s: %s", item, state))
 	}
-	content := renderMenu("Config", items, m.configIndex, "Enter to toggle, Esc to back", theme)
+	content := renderMenu("Config", items, m.configIndex, "Enter to toggle, Left/Right to adjust, Esc to back", theme)
 	return center(m.width, m.height, content)
 }
 
@@ -119,23 +124,24 @@ func viewNameEntry(m Model) string {
 
 func viewGame(m Model) string {
 	theme := themes[m.themeIndex]
-	minWidth, minHeight := minGameSize()
+	scale := clampScale(m.config.Scale)
+	minWidth, minHeight := minGameSize(scale)
 	if m.width > 0 && m.height > 0 && (m.width < minWidth || m.height < minHeight) {
 		message := fmt.Sprintf("Terminal too small. Need at least %dx%d. Current %dx%d.", minWidth, minHeight, m.width, m.height)
 		return center(m.width, m.height, message)
 	}
-	board := renderBoard(m.game, theme)
-	info := renderInfo(m.game, theme)
+	board := renderBoard(m.game, theme, scale)
+	info := renderInfo(m.game, theme, scale)
 	if m.width >= minWidth+24 {
 		return center(m.width, m.height, lipgloss.JoinHorizontal(lipgloss.Top, board, info))
 	}
 	return center(m.width, m.height, lipgloss.JoinVertical(lipgloss.Left, board, info))
 }
 
-func renderBoard(g Game, theme Theme) string {
+func renderBoard(g Game, theme Theme, scale int) string {
 	border := lipgloss.NewStyle().Foreground(theme.BorderColor)
 	cellEmpty := lipgloss.NewStyle()
-	cellText := "  "
+	cellText := strings.Repeat(" ", cellWidth(scale))
 	board := make([][]int, boardHeight)
 	for y := range board {
 		board[y] = make([]int, boardWidth)
@@ -149,37 +155,39 @@ func renderBoard(g Game, theme Theme) string {
 		}
 	}
 	var b strings.Builder
-	b.WriteString(border.Render("+" + strings.Repeat("-", boardWidth*2) + "+"))
+	b.WriteString(border.Render("+" + strings.Repeat("-", boardWidth*cellWidth(scale)) + "+"))
 	b.WriteString("\n")
 	for y := 0; y < boardHeight; y++ {
-		b.WriteString(border.Render("|"))
-		for x := 0; x < boardWidth; x++ {
-			val := board[y][x]
-			if val == 0 {
-				b.WriteString(cellEmpty.Render(cellText))
-				continue
+		for repeat := 0; repeat < scale; repeat++ {
+			b.WriteString(border.Render("|"))
+			for x := 0; x < boardWidth; x++ {
+				val := board[y][x]
+				if val == 0 {
+					b.WriteString(cellEmpty.Render(cellText))
+					continue
+				}
+				color := theme.PieceColors[(val-1)%len(theme.PieceColors)]
+				b.WriteString(lipgloss.NewStyle().Background(color).Render(cellText))
 			}
-			color := theme.PieceColors[(val-1)%len(theme.PieceColors)]
-			b.WriteString(lipgloss.NewStyle().Background(color).Render(cellText))
+			b.WriteString(border.Render("|"))
+			b.WriteString("\n")
 		}
-		b.WriteString(border.Render("|"))
-		b.WriteString("\n")
 	}
-	b.WriteString(border.Render("+" + strings.Repeat("-", boardWidth*2) + "+"))
+	b.WriteString(border.Render("+" + strings.Repeat("-", boardWidth*cellWidth(scale)) + "+"))
 	return b.String()
 }
 
-func renderInfo(g Game, theme Theme) string {
+func renderInfo(g Game, theme Theme, scale int) string {
 	var b strings.Builder
 	pad := lipgloss.NewStyle().PaddingLeft(2)
 	b.WriteString(pad.Render(titleStyle(theme).Render("Next")))
 	b.WriteString("\n")
-	b.WriteString(pad.Render(renderMiniPiece(g.Next, theme)))
+	b.WriteString(pad.Render(renderMiniPiece(g.Next, theme, scale)))
 	b.WriteString("\n\n")
 	b.WriteString(pad.Render(titleStyle(theme).Render("Hold")))
 	b.WriteString("\n")
 	if g.HasHold {
-		b.WriteString(pad.Render(renderMiniPiece(g.HoldKind, theme)))
+		b.WriteString(pad.Render(renderMiniPiece(g.HoldKind, theme, scale)))
 	} else {
 		b.WriteString(pad.Render("(empty)"))
 	}
@@ -197,6 +205,7 @@ func renderInfo(g Game, theme Theme) string {
 		"C: hold",
 		"P: pause",
 		"Q: menu",
+		"Ctrl+/-: zoom",
 	}
 	for _, line := range keys {
 		b.WriteString(pad.Render(helpStyle(theme).Render(line)))
@@ -209,7 +218,7 @@ func renderInfo(g Game, theme Theme) string {
 	return b.String()
 }
 
-func renderMiniPiece(kind int, theme Theme) string {
+func renderMiniPiece(kind int, theme Theme, scale int) string {
 	grid := make([][]int, 4)
 	for y := range grid {
 		grid[y] = make([]int, 4)
@@ -218,23 +227,28 @@ func renderMiniPiece(kind int, theme Theme) string {
 		grid[p.Y][p.X] = 1
 	}
 	cellEmpty := lipgloss.NewStyle()
+	cellText := strings.Repeat(" ", cellWidth(scale))
 	var b strings.Builder
 	for y := 0; y < 4; y++ {
-		for x := 0; x < 4; x++ {
-			if grid[y][x] == 0 {
-				b.WriteString(cellEmpty.Render("  "))
-				continue
+		for repeat := 0; repeat < scale; repeat++ {
+			for x := 0; x < 4; x++ {
+				if grid[y][x] == 0 {
+					b.WriteString(cellEmpty.Render(cellText))
+					continue
+				}
+				color := theme.PieceColors[kind%len(theme.PieceColors)]
+				b.WriteString(lipgloss.NewStyle().Background(color).Render(cellText))
 			}
-			color := theme.PieceColors[kind%len(theme.PieceColors)]
-			b.WriteString(lipgloss.NewStyle().Background(color).Render("  "))
+			b.WriteString("\n")
 		}
-		b.WriteString("\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func minGameSize() (int, int) {
-	return boardWidth*2 + 4, boardHeight + 4
+func minGameSize(scale int) (int, int) {
+	width := boardWidth*cellWidth(scale) + 4
+	height := boardHeight*scale + 4
+	return width, height
 }
 
 func titleStyle(theme Theme) lipgloss.Style {
@@ -256,17 +270,29 @@ func center(width, height int, content string) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, content)
 }
 
+func clampScale(value int) int {
+	if value < 1 {
+		return 1
+	}
+	if value > 3 {
+		return 3
+	}
+	return value
+}
+
+func cellWidth(scale int) int {
+	if scale < 1 {
+		scale = 1
+	}
+	return 2 * scale
+}
+
 func renderMenu(title string, items []string, selected int, footer string, theme Theme) string {
 	maxWidth := lipgloss.Width(title)
 	lines := make([]string, 0, len(items))
 	for i, item := range items {
-		prefix := "  "
-		if i == selected {
-			prefix = "> "
-		}
-		line := fmt.Sprintf("%s%s", prefix, item)
-		lines = append(lines, line)
-		if width := lipgloss.Width(line); width > maxWidth {
+		lines = append(lines, item)
+		if width := lipgloss.Width(item); width > maxWidth {
 			maxWidth = width
 		}
 	}
@@ -279,7 +305,9 @@ func renderMenu(title string, items []string, selected int, footer string, theme
 	b.WriteString("\n\n")
 	for i, line := range lines {
 		if i == selected {
-			line = highlightStyle(theme).Render(line)
+			b.WriteString(lineStyle.Render(highlightStyle(theme).Render(line)))
+			b.WriteString("\n")
+			continue
 		}
 		b.WriteString(lineStyle.Render(line))
 		b.WriteString("\n")

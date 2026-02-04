@@ -84,6 +84,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case soundMsg:
 		return m, nil
 	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+=", "ctrl++":
+			m.adjustScale(1)
+			return m, nil
+		case "ctrl+-", "ctrl+_":
+			m.adjustScale(-1)
+			return m, nil
+		}
 		switch m.screen {
 		case screenMenu:
 			return m, m.updateMenu(msg)
@@ -151,6 +159,22 @@ func soundEventForAction(locked bool, cleared int) (SoundEvent, bool) {
 		return SoundLock, true
 	}
 	return SoundLock, false
+}
+
+func (m *Model) adjustScale(delta int) {
+	minScale := 1
+	maxScale := 3
+	newScale := m.config.Scale + delta
+	if newScale < minScale {
+		newScale = minScale
+	}
+	if newScale > maxScale {
+		newScale = maxScale
+	}
+	if newScale != m.config.Scale {
+		m.config.Scale = newScale
+		_ = saveConfig(m.config)
+	}
 }
 
 func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
@@ -307,9 +331,25 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 				m.sound.SetEnabled(m.config.Sound)
 			}
 			_ = saveConfig(m.config)
+		case 1:
+			m.adjustScale(1)
 		}
 		if m.config.Sound {
 			return playSound(m.sound, SoundMenuSelect)
+		}
+	case "left", "h":
+		if m.configIndex == 1 {
+			m.adjustScale(-1)
+			if m.config.Sound {
+				return playSound(m.sound, SoundMenuMove)
+			}
+		}
+	case "right", "l":
+		if m.configIndex == 1 {
+			m.adjustScale(1)
+			if m.config.Sound {
+				return playSound(m.sound, SoundMenuMove)
+			}
 		}
 	case "q", "esc":
 		m.screen = screenMenu
@@ -358,4 +398,5 @@ var menuItems = []string{
 
 var configItems = []string{
 	"Sound Effects",
+	"Game Scale",
 }

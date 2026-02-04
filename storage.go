@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Theme string `json:"theme"`
 	Sound bool   `json:"sound"`
+	Scale int    `json:"scale"`
 }
 
 type ScoreEntry struct {
@@ -24,6 +25,7 @@ func loadConfig() (Config, error) {
 	config := Config{
 		Theme: themes[0].Name,
 		Sound: true,
+		Scale: 1,
 	}
 	path, err := configPath()
 	if err != nil {
@@ -38,6 +40,9 @@ func loadConfig() (Config, error) {
 	}
 	if config.Theme == "" {
 		config.Theme = themes[0].Name
+	}
+	if config.Scale < 1 {
+		config.Scale = 1
 	}
 	return config, nil
 }
