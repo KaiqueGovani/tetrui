@@ -12,7 +12,7 @@ Terminal-based falling-blocks tribute game with a focused TUI, local and synced 
 ### Quick install (curl)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<your-org>/<your-repo>/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/KaiqueGovani/tetrui/master/install.sh | bash
 ```
 
 ### Local build
