@@ -50,6 +50,7 @@ func (s *ScoreSync) FetchScoresCmd() tea.Cmd {
 		if s == nil || !s.enabled {
 			return scoresLoadedMsg{}
 		}
+		DebugLogf("scores fetch start url=%s", s.baseURL)
 		req, err := http.NewRequest(http.MethodGet, s.baseURL, nil)
 		if err != nil {
 			return scoresLoadedMsg{err: err}
@@ -59,16 +60,20 @@ func (s *ScoreSync) FetchScoresCmd() tea.Cmd {
 		}
 		resp, err := s.client.Do(req)
 		if err != nil {
+			DebugLogf("scores fetch request error: %v", err)
 			return scoresLoadedMsg{err: err}
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			DebugLogf("scores fetch status=%d", resp.StatusCode)
 			return scoresLoadedMsg{err: errUnexpectedStatus(resp.StatusCode)}
 		}
 		var payload []apiScore
 		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			DebugLogf("scores fetch decode error: %v", err)
 			return scoresLoadedMsg{err: err}
 		}
+		DebugLogf("scores fetch ok count=%d", len(payload))
 		scores := make([]ScoreEntry, 0, len(payload))
 		for _, entry := range payload {
 			scores = append(scores, entry.ToScoreEntry())
@@ -82,6 +87,7 @@ func (s *ScoreSync) UploadScoreCmd(entry ScoreEntry) tea.Cmd {
 		if s == nil || !s.enabled {
 			return scoreUploadedMsg{}
 		}
+		DebugLogf("score upload start name=%s score=%d", entry.Name, entry.Score)
 		payload, err := json.Marshal(uploadScore{
 			Name:  entry.Name,
 			Score: entry.Score,
@@ -101,12 +107,15 @@ func (s *ScoreSync) UploadScoreCmd(entry ScoreEntry) tea.Cmd {
 		}
 		resp, err := s.client.Do(req)
 		if err != nil {
+			DebugLogf("score upload request error: %v", err)
 			return scoreUploadedMsg{err: err}
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			DebugLogf("score upload status=%d", resp.StatusCode)
 			return scoreUploadedMsg{err: errUnexpectedStatus(resp.StatusCode)}
 		}
+		DebugLogf("score upload ok")
 		return scoreUploadedMsg{}
 	}
 }
