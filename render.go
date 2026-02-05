@@ -97,7 +97,12 @@ func viewScores(m Model) string {
 	}
 	if m.syncWarning != "" {
 		b.WriteString("\n")
-		b.WriteString(helpStyle(theme).Render(m.syncWarning))
+		b.WriteString(warningStyle(theme).Render(m.syncWarning))
+		b.WriteString("\n")
+	}
+	if m.syncLoading {
+		b.WriteString("\n")
+		b.WriteString(helpStyle(theme).Render(renderSyncLoader(m.syncDots)))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -292,11 +297,25 @@ func helpStyle(theme Theme) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(theme.TextColor)
 }
 
+func warningStyle(theme Theme) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+}
+
 func center(width, height int, content string) string {
 	if width == 0 || height == 0 {
 		return content
 	}
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, content)
+}
+
+func renderSyncLoader(dots int) string {
+	if dots < 0 {
+		dots = 0
+	}
+	if dots > 3 {
+		dots = dots % 4
+	}
+	return "Syncing" + strings.Repeat(".", dots)
 }
 
 func clampScale(value int) int {

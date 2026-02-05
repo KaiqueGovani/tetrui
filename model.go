@@ -29,6 +29,8 @@ type scoreUploadedMsg struct {
 	err error
 }
 
+type syncTickMsg struct{}
+
 type Model struct {
 	screen       Screen
 	width        int
@@ -44,6 +46,8 @@ type Model struct {
 	sound        *SoundEngine
 	sync         *ScoreSync
 	syncWarning  string
+	syncLoading  bool
+	syncDots     int
 	music        *MusicPlayer
 }
 
@@ -106,10 +110,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case soundMsg:
 		return m, nil
+	case syncTickMsg:
+		if m.syncLoading {
+			m.syncDots = (m.syncDots + 1) % 4
+			return m, syncTickCmd()
+		}
+		return m, nil
 	case scoresLoadedMsg:
 		if msg.err != nil {
 			DebugLogf("scores fetch error: %v", msg.err)
 			m.syncWarning = "Offline: scores not synced."
+			m.syncLoading = false
 			return m, nil
 		}
 		if m.sync == nil || !m.sync.Enabled() {
@@ -121,14 +132,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scores = mergeScores(m.scores, msg.scores)
 			_ = saveScores(m.scores)
 		}
+		m.syncLoading = false
 		return m, nil
 	case scoreUploadedMsg:
 		if msg.err != nil {
 			DebugLogf("score upload error: %v", msg.err)
 			m.syncWarning = "Offline: scores not synced."
+			m.syncLoading = false
 			return m, nil
 		}
 		m.syncWarning = ""
+		m.syncLoading = false
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -178,6 +192,10 @@ func (m Model) View() string {
 
 func tickCmd(interval time.Duration) tea.Cmd {
 	return tea.Tick(interval, func(time.Time) tea.Msg { return tickMsg{} })
+}
+
+func syncTickCmd() tea.Cmd {
+	return tea.Tick(300*time.Millisecond, func(time.Time) tea.Msg { return syncTickMsg{} })
 }
 
 func playSound(engine *SoundEngine, event SoundEvent) tea.Cmd {
@@ -308,7 +326,9 @@ func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
 		case 2:
 			m.scoresOffset = 0
 			if m.sync != nil && m.sync.Enabled() {
-				return tea.Batch(cmd, m.setScreen(screenScores), m.sync.FetchScoresCmd())
+				m.syncLoading = true
+				m.syncDots = 0
+				return tea.Batch(cmd, m.setScreen(screenScores), m.sync.FetchScoresCmd(), syncTickCmd())
 			}
 			m.syncWarning = "Score sync is disabled."
 			return tea.Batch(cmd, m.setScreen(screenScores))
@@ -524,8 +544,11 @@ func (m *Model) updateNameEntry(msg tea.KeyMsg) tea.Cmd {
 		var cmds []tea.Cmd
 		if m.sync != nil && m.sync.Enabled() {
 			entry := m.scores[0]
+			m.syncLoading = true
+			m.syncDots = 0
 			cmds = append(cmds, m.sync.UploadScoreCmd(entry))
 			cmds = append(cmds, m.sync.FetchScoresCmd())
+			cmds = append(cmds, syncTickCmd())
 		}
 		if len(cmds) == 0 {
 			return cmd
