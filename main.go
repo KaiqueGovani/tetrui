@@ -12,6 +12,7 @@ func main() {
 	flag.Parse()
 	EnableDebugLogging(*debug)
 	DebugLogf("tetrui start debug=%v", *debug)
+	loadEmbeddedEnv()
 	program := tea.NewProgram(NewModel(), tea.WithAltScreen())
 	if _, err := program.Run(); err != nil {
 		DebugLogf("program error: %v", err)
