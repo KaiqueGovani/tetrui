@@ -36,6 +36,8 @@ jobs:
           mkdir -p dist
           GOOS=$(go env GOOS)
           GOARCH=$(go env GOARCH)
+          echo "GOOS=$GOOS" >> $GITHUB_ENV
+          echo "GOARCH=$GOARCH" >> $GITHUB_ENV
           EXT=""
           if [ "$GOOS" = "windows" ]; then
             EXT=".exe"
@@ -45,7 +47,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tetrui-${{ matrix.os }}-${{ matrix.arch }}
+          name: tetrui-${{ env.GOOS }}-${{ env.GOARCH }}
           path: dist/*
 
   release:
