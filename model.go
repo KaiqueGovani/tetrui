@@ -30,20 +30,21 @@ type scoreUploadedMsg struct {
 }
 
 type Model struct {
-	screen      Screen
-	width       int
-	height      int
-	menuIndex   int
-	configIndex int
-	themeIndex  int
-	config      Config
-	scores      []ScoreEntry
-	game        Game
-	nameInput   string
-	sound       *SoundEngine
-	sync        *ScoreSync
-	syncWarning string
-	music       *MusicPlayer
+	screen       Screen
+	width        int
+	height       int
+	menuIndex    int
+	configIndex  int
+	themeIndex   int
+	scoresOffset int
+	config       Config
+	scores       []ScoreEntry
+	game         Game
+	nameInput    string
+	sound        *SoundEngine
+	sync         *ScoreSync
+	syncWarning  string
+	music        *MusicPlayer
 }
 
 func NewModel() Model {
@@ -111,7 +112,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.syncWarning = "Offline: scores not synced."
 			return m, nil
 		}
-		m.syncWarning = ""
+		if m.sync == nil || !m.sync.Enabled() {
+			m.syncWarning = "Score sync is disabled."
+		} else {
+			m.syncWarning = ""
+		}
 		if len(msg.scores) > 0 {
 			m.scores = mergeScores(m.scores, msg.scores)
 			_ = saveScores(m.scores)
@@ -301,9 +306,11 @@ func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
 		case 1:
 			return tea.Batch(cmd, m.setScreen(screenThemes))
 		case 2:
+			m.scoresOffset = 0
 			if m.sync != nil && m.sync.Enabled() {
 				return tea.Batch(cmd, m.setScreen(screenScores), m.sync.FetchScoresCmd())
 			}
+			m.syncWarning = "Score sync is disabled."
 			return tea.Batch(cmd, m.setScreen(screenScores))
 		case 3:
 			return tea.Batch(cmd, m.setScreen(screenConfig))
@@ -404,6 +411,18 @@ func (m *Model) updateScores(msg tea.KeyMsg) tea.Cmd {
 			return tea.Batch(cmd, playSound(m.sound, SoundMenuSelect))
 		}
 		return cmd
+	case "up", "k":
+		if m.scoresOffset > 0 {
+			m.scoresOffset--
+		}
+	case "down", "j":
+		max := len(m.scores) - scoresPageSize
+		if max < 0 {
+			max = 0
+		}
+		if m.scoresOffset < max {
+			m.scoresOffset++
+		}
 	}
 	return nil
 }
@@ -500,6 +519,7 @@ func (m *Model) updateNameEntry(msg tea.KeyMsg) tea.Cmd {
 			When:  time.Now().Format("2006-01-02 15:04"),
 		})
 		_ = saveScores(m.scores)
+		m.scoresOffset = 0
 		cmd := m.setScreen(screenScores)
 		var cmds []tea.Cmd
 		if m.sync != nil && m.sync.Enabled() {

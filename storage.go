@@ -119,8 +119,8 @@ func insertScore(scores []ScoreEntry, entry ScoreEntry) []ScoreEntry {
 		}
 		return scores[i].Score > scores[j].Score
 	})
-	if len(scores) > 10 {
-		return scores[:10]
+	if len(scores) > 50 {
+		return scores[:50]
 	}
 	return scores
 }
@@ -142,8 +142,8 @@ func mergeScores(local []ScoreEntry, remote []ScoreEntry) []ScoreEntry {
 		}
 		return merged[i].Score > merged[j].Score
 	})
-	if len(merged) > 10 {
-		return merged[:10]
+	if len(merged) > 50 {
+		return merged[:50]
 	}
 	return merged
 }

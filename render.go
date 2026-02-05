@@ -79,9 +79,19 @@ func viewScores(m Model) string {
 	if len(m.scores) == 0 {
 		b.WriteString("No scores yet.\n")
 	} else {
-		for i, score := range m.scores {
-			line := fmt.Sprintf("%2d. %-12s %7d  L%2d  %s", i+1, score.Name, score.Score, score.Level, score.When)
+		start := m.scoresOffset
+		end := start + scoresPageSize
+		if end > len(m.scores) {
+			end = len(m.scores)
+		}
+		for i, score := range m.scores[start:end] {
+			line := fmt.Sprintf("%2d. %-12s %7d  L%2d  %s", start+i+1, score.Name, score.Score, score.Level, score.When)
 			b.WriteString(line)
+			b.WriteString("\n")
+		}
+		if len(m.scores) > scoresPageSize {
+			b.WriteString("\n")
+			b.WriteString(helpStyle(theme).Render("Use Up/Down to scroll"))
 			b.WriteString("\n")
 		}
 	}
@@ -94,6 +104,8 @@ func viewScores(m Model) string {
 	b.WriteString(helpStyle(theme).Render("Enter to back"))
 	return center(m.width, m.height, b.String())
 }
+
+const scoresPageSize = 20
 
 func viewConfig(m Model) string {
 	theme := themes[m.themeIndex]
