@@ -90,6 +90,7 @@ func (s *ScoreSync) UploadScoreCmd(entry ScoreEntry) tea.Cmd {
 			return scoreUploadedMsg{}
 		}
 		DebugLogf("score upload start name=%s score=%d", entry.Name, entry.Score)
+		DebugLogf("score upload url=%s", s.baseURL)
 		payload, err := json.Marshal(uploadScore{
 			Name:  entry.Name,
 			Score: entry.Score,

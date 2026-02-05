@@ -257,15 +257,19 @@ func (m *Model) setScreen(screen Screen) tea.Cmd {
 
 func (m *Model) syncMusicForScreen() tea.Cmd {
 	if m.music == nil {
+		DebugLogf("music sync skipped: player nil")
 		return nil
 	}
 	if !m.config.Music {
+		DebugLogf("music sync stopped: disabled")
 		m.music.Stop()
 		return nil
 	}
 	if m.screen == screenGame {
+		DebugLogf("music sync: start game")
 		return m.music.StartGameCmd()
 	}
+	DebugLogf("music sync: start menu")
 	return m.music.StartMenuCmd()
 }
 

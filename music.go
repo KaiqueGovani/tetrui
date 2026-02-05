@@ -58,6 +58,10 @@ func (m *MusicPlayer) SetVolume(volume float64) {
 
 func (m *MusicPlayer) StartMenuCmd() tea.Cmd {
 	return func() tea.Msg {
+		if m.ctx == nil {
+			DebugLogf("music start skipped: no context")
+			return nil
+		}
 		m.StartMenu()
 		return nil
 	}
@@ -65,6 +69,10 @@ func (m *MusicPlayer) StartMenuCmd() tea.Cmd {
 
 func (m *MusicPlayer) StartGameCmd() tea.Cmd {
 	return func() tea.Msg {
+		if m.ctx == nil {
+			DebugLogf("music start skipped: no context")
+			return nil
+		}
 		m.StartGame()
 		return nil
 	}
