@@ -126,12 +126,21 @@ func (m *MusicPlayer) start(mode MusicMode, loopStart, loopEnd time.Duration) {
 			case <-stop:
 				return
 			case <-ticker.C:
+				if isStopped(stop) {
+					return
+				}
 				if loopEnd > 0 {
 					if dec.Position() >= loopEnd {
+						if isStopped(stop) {
+							return
+						}
 						_ = dec.SeekToTime(loopStart)
 						player.Play()
 					}
 				} else if !player.IsPlaying() {
+					if isStopped(stop) {
+						return
+					}
 					_ = dec.SeekToTime(loopStart)
 					player.Play()
 				}
@@ -157,6 +166,15 @@ func (m *MusicPlayer) volumeValue() float64 {
 	volume := m.volume
 	m.mu.Unlock()
 	return volume
+}
+
+func isStopped(stop <-chan struct{}) bool {
+	select {
+	case <-stop:
+		return true
+	default:
+		return false
+	}
 }
 
 type safeDecoder struct {
