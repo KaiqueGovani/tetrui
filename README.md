@@ -39,15 +39,6 @@ go build -o tetrui
 - Music loop in menu and full loop during gameplay
 - Resize-safe layout for small terminals
 
-## Score Sync (n8n)
-
-Set these environment variables (store secrets in `.env` and GitHub Actions secrets):
-
-```bash
-TETRUI_SCORE_API_URL=https://your-score-api.example.com
-TETRUI_SCORE_API_KEY=your_api_key_here
-```
-
 ## Music Credits
 
 Music by <a href="https://pixabay.com/users/gregorquendel-19912121/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=185592">Gregor Quendel</a> from <a href="https://pixabay.com/music//?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=185592">Pixabay</a>
