@@ -64,7 +64,7 @@ func NewModel() Model {
 		game:       NewGame(),
 		sound:      sound,
 		sync:       NewScoreSyncFromEnv(config.Sync),
-		music:      NewMusicPlayer(sound.Context(), volumeFromPercent(config.Volume), config.Music),
+		music:      NewMusicPlayer(volumeFromPercent(config.Volume), config.Music),
 	}
 }
 
@@ -103,6 +103,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case scoresLoadedMsg:
 		if msg.err != nil {
+			DebugLogf("scores fetch error: %v", msg.err)
 			m.syncWarning = "Offline: scores not synced."
 			return m, nil
 		}
@@ -114,6 +115,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case scoreUploadedMsg:
 		if msg.err != nil {
+			DebugLogf("score upload error: %v", msg.err)
 			m.syncWarning = "Offline: scores not synced."
 			return m, nil
 		}

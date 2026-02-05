@@ -27,21 +27,18 @@ const (
 )
 
 type MusicPlayer struct {
-	ctx    *oto.Context
-	mu     sync.Mutex
-	mode   MusicMode
-	player *oto.Player
-	dec    *safeDecoder
-	stop   chan struct{}
-	volume float64
+	ctx        *oto.Context
+	sampleRate int
+	mu         sync.Mutex
+	mode       MusicMode
+	player     *oto.Player
+	dec        *safeDecoder
+	stop       chan struct{}
+	volume     float64
 }
 
-func NewMusicPlayer(ctx *oto.Context, volume float64, enabled bool) *MusicPlayer {
-	if ctx == nil {
-		return nil
-	}
+func NewMusicPlayer(volume float64, enabled bool) *MusicPlayer {
 	player := &MusicPlayer{
-		ctx:    ctx,
 		mode:   musicOff,
 		volume: clampVolume(volume),
 	}
@@ -95,8 +92,20 @@ func (m *MusicPlayer) start(mode MusicMode, loopStart, loopEnd time.Duration) {
 	m.stopLocked()
 	dec, err := newSafeDecoder()
 	if err != nil {
+		DebugLogf("music decode error: %v", err)
 		m.mu.Unlock()
 		return
+	}
+	sampleRate := dec.SampleRate()
+	if m.ctx == nil || m.sampleRate != sampleRate {
+		ctx, err := newOtoContext(sampleRate)
+		if err != nil {
+			DebugLogf("music context error: %v", err)
+			m.mu.Unlock()
+			return
+		}
+		m.ctx = ctx
+		m.sampleRate = sampleRate
 	}
 	if loopEnd <= 0 {
 		loopEnd = dec.Duration()
@@ -117,6 +126,7 @@ func (m *MusicPlayer) start(mode MusicMode, loopStart, loopEnd time.Duration) {
 	m.mode = mode
 	stop := m.stop
 	m.mu.Unlock()
+	DebugLogf("music start mode=%v loopStart=%v loopEnd=%v sampleRate=%d", mode, loopStart, loopEnd, sampleRate)
 
 	go func() {
 		ticker := time.NewTicker(120 * time.Millisecond)
@@ -147,6 +157,19 @@ func (m *MusicPlayer) start(mode MusicMode, loopStart, loopEnd time.Duration) {
 			}
 		}
 	}()
+}
+
+func newOtoContext(sampleRate int) (*oto.Context, error) {
+	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
+		SampleRate:   sampleRate,
+		ChannelCount: 2,
+		Format:       oto.FormatSignedInt16LE,
+	})
+	if err != nil {
+		return nil, err
+	}
+	<-ready
+	return ctx, nil
 }
 
 func (m *MusicPlayer) stopLocked() {
@@ -217,6 +240,12 @@ func (s *safeDecoder) Duration() time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.dec.Duration()
+}
+
+func (s *safeDecoder) SampleRate() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.dec.SampleRate()
 }
 
 type volumeReader struct {
