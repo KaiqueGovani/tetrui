@@ -22,8 +22,10 @@ func NewScoreSyncFromEnv(enabled bool) *ScoreSync {
 	baseURL := strings.TrimSpace(os.Getenv("TETRUI_SCORE_API_URL"))
 	apiKey := strings.TrimSpace(os.Getenv("TETRUI_SCORE_API_KEY"))
 	if baseURL == "" {
+		DebugLogf("score sync disabled: missing TETRUI_SCORE_API_URL")
 		return nil
 	}
+	DebugLogf("score sync enabled=%v url=%s", enabled, baseURL)
 	return &ScoreSync{
 		enabled: enabled,
 		baseURL: strings.TrimRight(baseURL, "/"),
