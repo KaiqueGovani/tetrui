@@ -239,7 +239,6 @@ func renderInfo(g Game, theme Theme, scale int) string {
 		"C: hold",
 		"P: pause",
 		"Q: menu",
-		"Ctrl+/-: zoom",
 	}
 	for _, line := range keys {
 		b.WriteString(pad.Render(helpStyle(theme).Render(line)))
