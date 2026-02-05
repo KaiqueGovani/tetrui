@@ -33,24 +33,16 @@ type SoundEngine struct {
 	mu         sync.RWMutex
 }
 
-func NewSoundEngine(enabled bool) *SoundEngine {
-	engine := &SoundEngine{
+func NewSoundEngine(ctx *oto.Context, sampleRate int, enabled bool) *SoundEngine {
+	if sampleRate <= 0 {
+		sampleRate = 44100
+	}
+	return &SoundEngine{
 		enabled:    enabled,
-		sampleRate: 44100,
+		sampleRate: sampleRate,
+		ctx:        ctx,
 		volume:     0.7,
 	}
-	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
-		SampleRate:   engine.sampleRate,
-		ChannelCount: 2,
-		Format:       oto.FormatSignedInt16LE,
-	})
-	if err != nil {
-		engine.enabled = false
-		return engine
-	}
-	<-ready
-	engine.ctx = ctx
-	return engine
 }
 
 func (s *SoundEngine) SetEnabled(enabled bool) {

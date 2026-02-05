@@ -54,7 +54,11 @@ func NewModel() Model {
 		index = 0
 		config.Theme = themes[index].Name
 	}
-	sound := NewSoundEngine(config.Sound)
+	ctx, sampleRate, err := initAudioContext()
+	if err != nil {
+		DebugLogf("audio context init error: %v", err)
+	}
+	sound := NewSoundEngine(ctx, sampleRate, config.Sound)
 	sound.SetVolume(volumeFromPercent(config.Volume))
 	return Model{
 		screen:     screenMenu,
@@ -64,7 +68,7 @@ func NewModel() Model {
 		game:       NewGame(),
 		sound:      sound,
 		sync:       NewScoreSyncFromEnv(config.Sync),
-		music:      NewMusicPlayer(volumeFromPercent(config.Volume), config.Music),
+		music:      NewMusicPlayer(ctx, sampleRate, volumeFromPercent(config.Volume), config.Music),
 	}
 }
 

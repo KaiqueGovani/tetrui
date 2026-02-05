@@ -37,10 +37,12 @@ type MusicPlayer struct {
 	volume     float64
 }
 
-func NewMusicPlayer(volume float64, enabled bool) *MusicPlayer {
+func NewMusicPlayer(ctx *oto.Context, sampleRate int, volume float64, enabled bool) *MusicPlayer {
 	player := &MusicPlayer{
-		mode:   musicOff,
-		volume: clampVolume(volume),
+		ctx:        ctx,
+		sampleRate: sampleRate,
+		mode:       musicOff,
+		volume:     clampVolume(volume),
 	}
 	if !enabled {
 		player.mode = musicOff
@@ -96,16 +98,10 @@ func (m *MusicPlayer) start(mode MusicMode, loopStart, loopEnd time.Duration) {
 		m.mu.Unlock()
 		return
 	}
-	sampleRate := dec.SampleRate()
-	if m.ctx == nil || m.sampleRate != sampleRate {
-		ctx, err := newOtoContext(sampleRate)
-		if err != nil {
-			DebugLogf("music context error: %v", err)
-			m.mu.Unlock()
-			return
-		}
-		m.ctx = ctx
-		m.sampleRate = sampleRate
+	if m.ctx == nil {
+		DebugLogf("music context unavailable")
+		m.mu.Unlock()
+		return
 	}
 	if loopEnd <= 0 {
 		loopEnd = dec.Duration()
@@ -126,7 +122,7 @@ func (m *MusicPlayer) start(mode MusicMode, loopStart, loopEnd time.Duration) {
 	m.mode = mode
 	stop := m.stop
 	m.mu.Unlock()
-	DebugLogf("music start mode=%v loopStart=%v loopEnd=%v sampleRate=%d", mode, loopStart, loopEnd, sampleRate)
+	DebugLogf("music start mode=%v loopStart=%v loopEnd=%v", mode, loopStart, loopEnd)
 
 	go func() {
 		ticker := time.NewTicker(120 * time.Millisecond)
@@ -157,19 +153,6 @@ func (m *MusicPlayer) start(mode MusicMode, loopStart, loopEnd time.Duration) {
 			}
 		}
 	}()
-}
-
-func newOtoContext(sampleRate int) (*oto.Context, error) {
-	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
-		SampleRate:   sampleRate,
-		ChannelCount: 2,
-		Format:       oto.FormatSignedInt16LE,
-	})
-	if err != nil {
-		return nil, err
-	}
-	<-ready
-	return ctx, nil
 }
 
 func (m *MusicPlayer) stopLocked() {
