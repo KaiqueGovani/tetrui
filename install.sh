@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -e
 
-REPO="${TETRUI_REPO:-tetrui/tetrui}"
+REPO="${TETRUI_REPO:-KaiqueGovani/tetrui}"
 VERSION="${TETRUI_VERSION:-nightly}"
 DEST="${DEST:-$HOME/.local/bin/tetrui}"
 
