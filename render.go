@@ -107,8 +107,15 @@ func viewConfig(m Model) string {
 			}
 			items = append(items, fmt.Sprintf("%s: %s", item, state))
 		case 1:
-			items = append(items, fmt.Sprintf("%s: %dx", item, clampScale(m.config.Scale)))
+			if m.config.Music {
+				state = "ON"
+			}
+			items = append(items, fmt.Sprintf("%s: %s", item, state))
 		case 2:
+			items = append(items, fmt.Sprintf("%s: %d%%", item, clampVolumePercent(m.config.Volume)))
+		case 3:
+			items = append(items, fmt.Sprintf("%s: %dx", item, clampScale(m.config.Scale)))
+		case 4:
 			if m.config.Sync {
 				state = "ON"
 			}
@@ -286,6 +293,16 @@ func clampScale(value int) int {
 	}
 	if value > 3 {
 		return 3
+	}
+	return value
+}
+
+func clampVolumePercent(value int) int {
+	if value < 0 {
+		return 0
+	}
+	if value > 100 {
+		return 100
 	}
 	return value
 }

@@ -22,12 +22,14 @@ const (
 	SoundDrop
 	SoundMenuMove
 	SoundMenuSelect
+	SoundGameOver
 )
 
 type SoundEngine struct {
 	enabled    bool
 	sampleRate int
 	ctx        *oto.Context
+	volume     float64
 	mu         sync.RWMutex
 }
 
@@ -35,6 +37,7 @@ func NewSoundEngine(enabled bool) *SoundEngine {
 	engine := &SoundEngine{
 		enabled:    enabled,
 		sampleRate: 44100,
+		volume:     0.7,
 	}
 	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
 		SampleRate:   engine.sampleRate,
@@ -56,10 +59,24 @@ func (s *SoundEngine) SetEnabled(enabled bool) {
 	s.mu.Unlock()
 }
 
+func (s *SoundEngine) SetVolume(volume float64) {
+	s.mu.Lock()
+	s.volume = clampVolume(volume)
+	s.mu.Unlock()
+}
+
+func (s *SoundEngine) Context() *oto.Context {
+	s.mu.RLock()
+	ctx := s.ctx
+	s.mu.RUnlock()
+	return ctx
+}
+
 func (s *SoundEngine) Play(event SoundEvent) {
 	s.mu.RLock()
 	ctx := s.ctx
 	enabled := s.enabled
+	volume := s.volume
 	s.mu.RUnlock()
 	if !enabled || ctx == nil {
 		return
@@ -69,7 +86,7 @@ func (s *SoundEngine) Play(event SoundEvent) {
 		return
 	}
 	go func() {
-		buffer := renderToneSequence(sequence, s.sampleRate)
+		buffer := renderToneSequence(sequence, s.sampleRate, volume)
 		reader := bytes.NewReader(buffer)
 		player := ctx.NewPlayer(reader)
 		player.Play()
@@ -119,12 +136,14 @@ func tonesForEvent(event SoundEvent) []toneSpec {
 		return []toneSpec{{frequency: 260, duration: 24 * time.Millisecond, volume: 0.16}}
 	case SoundMenuSelect:
 		return []toneSpec{{frequency: 520, duration: 70 * time.Millisecond, volume: 0.2}}
+	case SoundGameOver:
+		return []toneSpec{{frequency: 180, duration: 160 * time.Millisecond, volume: 0.28}}
 	default:
 		return nil
 	}
 }
 
-func renderToneSequence(sequence []toneSpec, sampleRate int) []byte {
+func renderToneSequence(sequence []toneSpec, sampleRate int, masterVolume float64) []byte {
 	baseVolume := 0.3
 	gap := 10 * time.Millisecond
 	gapSamples := int(float64(sampleRate) * gap.Seconds())
@@ -144,6 +163,7 @@ func renderToneSequence(sequence []toneSpec, sampleRate int) []byte {
 		if spec.volume > 0 {
 			volume = spec.volume
 		}
+		volume *= clampVolume(masterVolume)
 		renderTone(buffer, index, spec, sampleRate, volume)
 		samples := int(float64(sampleRate) * spec.duration.Seconds())
 		index += samples * bytesPerSample
@@ -177,4 +197,14 @@ func renderTone(buffer []byte, start int, spec toneSpec, sampleRate int, volume 
 		buffer[start+i*4+2] = byte(value)
 		buffer[start+i*4+3] = byte(value >> 8)
 	}
+}
+
+func clampVolume(value float64) float64 {
+	if value < 0 {
+		return 0
+	}
+	if value > 1 {
+		return 1
+	}
+	return value
 }

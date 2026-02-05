@@ -11,10 +11,12 @@ import (
 )
 
 type Config struct {
-	Theme string `json:"theme"`
-	Sound bool   `json:"sound"`
-	Scale int    `json:"scale"`
-	Sync  bool   `json:"sync"`
+	Theme  string `json:"theme"`
+	Sound  bool   `json:"sound"`
+	Music  bool   `json:"music"`
+	Scale  int    `json:"scale"`
+	Sync   bool   `json:"sync"`
+	Volume int    `json:"volume"`
 }
 
 type ScoreEntry struct {
@@ -27,10 +29,12 @@ type ScoreEntry struct {
 
 func loadConfig() (Config, error) {
 	config := Config{
-		Theme: themes[0].Name,
-		Sound: true,
-		Scale: 1,
-		Sync:  true,
+		Theme:  themes[0].Name,
+		Sound:  true,
+		Music:  true,
+		Scale:  1,
+		Sync:   true,
+		Volume: 70,
 	}
 	path, err := configPath()
 	if err != nil {
@@ -46,11 +50,23 @@ func loadConfig() (Config, error) {
 	if !bytes.Contains(data, []byte("\"sync\"")) {
 		config.Sync = true
 	}
+	if !bytes.Contains(data, []byte("\"music\"")) {
+		config.Music = true
+	}
+	if !bytes.Contains(data, []byte("\"volume\"")) {
+		config.Volume = 70
+	}
 	if config.Theme == "" {
 		config.Theme = themes[0].Name
 	}
 	if config.Scale < 1 {
 		config.Scale = 1
+	}
+	if config.Volume < 0 {
+		config.Volume = 0
+	}
+	if config.Volume > 100 {
+		config.Volume = 100
 	}
 	return config, nil
 }

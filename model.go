@@ -43,6 +43,7 @@ type Model struct {
 	sound       *SoundEngine
 	sync        *ScoreSync
 	syncWarning string
+	music       *MusicPlayer
 }
 
 func NewModel() Model {
@@ -53,19 +54,22 @@ func NewModel() Model {
 		index = 0
 		config.Theme = themes[index].Name
 	}
+	sound := NewSoundEngine(config.Sound)
+	sound.SetVolume(volumeFromPercent(config.Volume))
 	return Model{
 		screen:     screenMenu,
 		config:     config,
 		scores:     scores,
 		themeIndex: index,
 		game:       NewGame(),
-		sound:      NewSoundEngine(config.Sound),
+		sound:      sound,
 		sync:       NewScoreSyncFromEnv(config.Sync),
+		music:      NewMusicPlayer(sound.Context(), volumeFromPercent(config.Volume), config.Music),
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return nil
+	return m.syncMusicForScreen()
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -78,9 +82,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.screen == screenGame && !m.game.Paused && !m.game.Over {
 			locked, cleared := m.game.Step()
 			if m.game.Over {
-				m.screen = screenNameEntry
+				cmd := m.setScreen(screenNameEntry)
 				m.nameInput = ""
-				return m, nil
+				if m.config.Sound {
+					return m, tea.Batch(cmd, playSound(m.sound, SoundGameOver))
+				}
+				return m, cmd
 			}
 			cmds := []tea.Cmd{tickCmd(m.game.FallInterval())}
 			if event, ok := soundEventForAction(locked, cleared); ok && m.config.Sound {
@@ -206,6 +213,56 @@ func (m *Model) adjustScale(delta int) {
 	}
 }
 
+func (m *Model) adjustVolume(delta int) {
+	newVolume := m.config.Volume + delta
+	if newVolume < 0 {
+		newVolume = 0
+	}
+	if newVolume > 100 {
+		newVolume = 100
+	}
+	if newVolume == m.config.Volume {
+		return
+	}
+	m.config.Volume = newVolume
+	if m.sound != nil {
+		m.sound.SetVolume(volumeFromPercent(newVolume))
+	}
+	if m.music != nil {
+		m.music.SetVolume(volumeFromPercent(newVolume))
+	}
+	_ = saveConfig(m.config)
+}
+
+func volumeFromPercent(value int) float64 {
+	if value < 0 {
+		value = 0
+	}
+	if value > 100 {
+		value = 100
+	}
+	return float64(value) / 100
+}
+
+func (m *Model) setScreen(screen Screen) tea.Cmd {
+	m.screen = screen
+	return m.syncMusicForScreen()
+}
+
+func (m *Model) syncMusicForScreen() tea.Cmd {
+	if m.music == nil {
+		return nil
+	}
+	if !m.config.Music {
+		m.music.Stop()
+		return nil
+	}
+	if m.screen == screenGame {
+		return m.music.StartGameCmd()
+	}
+	return m.music.StartMenuCmd()
+}
+
 func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
 	switch msg.String() {
@@ -230,17 +287,16 @@ func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
 		switch m.menuIndex {
 		case 0:
 			m.game = NewGame()
-			m.screen = screenGame
-			return tea.Batch(cmd, tickCmd(m.game.FallInterval()))
+			return tea.Batch(cmd, m.setScreen(screenGame), tickCmd(m.game.FallInterval()))
 		case 1:
-			m.screen = screenThemes
+			return tea.Batch(cmd, m.setScreen(screenThemes))
 		case 2:
-			m.screen = screenScores
 			if m.sync != nil && m.sync.Enabled() {
-				return tea.Batch(cmd, m.sync.FetchScoresCmd())
+				return tea.Batch(cmd, m.setScreen(screenScores), m.sync.FetchScoresCmd())
 			}
+			return tea.Batch(cmd, m.setScreen(screenScores))
 		case 3:
-			m.screen = screenConfig
+			return tea.Batch(cmd, m.setScreen(screenConfig))
 		case 4:
 			return tea.Quit
 		}
@@ -265,9 +321,12 @@ func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 	case " ":
 		locked, cleared := m.game.HardDrop()
 		if m.game.Over {
-			m.screen = screenNameEntry
+			cmd := m.setScreen(screenNameEntry)
 			m.nameInput = ""
-			return nil
+			if m.config.Sound {
+				return tea.Batch(cmd, playSound(m.sound, SoundGameOver))
+			}
+			return cmd
 		}
 		if m.config.Sound {
 			if cleared == 0 {
@@ -292,7 +351,7 @@ func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 	case "p":
 		m.game.Paused = !m.game.Paused
 	case "q", "esc":
-		m.screen = screenMenu
+		return m.setScreen(screenMenu)
 	}
 	return nil
 }
@@ -316,12 +375,13 @@ func (m *Model) updateThemes(msg tea.KeyMsg) tea.Cmd {
 	case "enter":
 		m.config.Theme = themes[m.themeIndex].Name
 		_ = saveConfig(m.config)
-		m.screen = screenMenu
+		cmd := m.setScreen(screenMenu)
 		if m.config.Sound {
-			return playSound(m.sound, SoundMenuSelect)
+			return tea.Batch(cmd, playSound(m.sound, SoundMenuSelect))
 		}
+		return cmd
 	case "q", "esc":
-		m.screen = screenMenu
+		return m.setScreen(screenMenu)
 	}
 	return nil
 }
@@ -329,10 +389,11 @@ func (m *Model) updateThemes(msg tea.KeyMsg) tea.Cmd {
 func (m *Model) updateScores(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "q", "esc", "enter":
-		m.screen = screenMenu
+		cmd := m.setScreen(screenMenu)
 		if m.config.Sound {
-			return playSound(m.sound, SoundMenuSelect)
+			return tea.Batch(cmd, playSound(m.sound, SoundMenuSelect))
 		}
+		return cmd
 	}
 	return nil
 }
@@ -362,8 +423,17 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 			}
 			_ = saveConfig(m.config)
 		case 1:
-			m.adjustScale(1)
+			m.config.Music = !m.config.Music
+			_ = saveConfig(m.config)
+			if m.config.Sound {
+				return tea.Batch(m.syncMusicForScreen(), playSound(m.sound, SoundMenuSelect))
+			}
+			return m.syncMusicForScreen()
 		case 2:
+			m.adjustVolume(5)
+		case 3:
+			m.adjustScale(1)
+		case 4:
 			m.config.Sync = !m.config.Sync
 			if m.sync != nil {
 				m.sync.SetEnabled(m.config.Sync)
@@ -374,21 +444,33 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 			return playSound(m.sound, SoundMenuSelect)
 		}
 	case "left", "h":
-		if m.configIndex == 1 {
+		if m.configIndex == 2 {
+			m.adjustVolume(-5)
+			if m.config.Sound {
+				return playSound(m.sound, SoundMenuMove)
+			}
+		}
+		if m.configIndex == 3 {
 			m.adjustScale(-1)
 			if m.config.Sound {
 				return playSound(m.sound, SoundMenuMove)
 			}
 		}
 	case "right", "l":
-		if m.configIndex == 1 {
+		if m.configIndex == 2 {
+			m.adjustVolume(5)
+			if m.config.Sound {
+				return playSound(m.sound, SoundMenuMove)
+			}
+		}
+		if m.configIndex == 3 {
 			m.adjustScale(1)
 			if m.config.Sound {
 				return playSound(m.sound, SoundMenuMove)
 			}
 		}
 	case "q", "esc":
-		m.screen = screenMenu
+		return m.setScreen(screenMenu)
 	}
 	return nil
 }
@@ -408,7 +490,7 @@ func (m *Model) updateNameEntry(msg tea.KeyMsg) tea.Cmd {
 			When:  time.Now().Format("2006-01-02 15:04"),
 		})
 		_ = saveScores(m.scores)
-		m.screen = screenScores
+		cmd := m.setScreen(screenScores)
 		var cmds []tea.Cmd
 		if m.sync != nil && m.sync.Enabled() {
 			entry := m.scores[0]
@@ -416,8 +498,9 @@ func (m *Model) updateNameEntry(msg tea.KeyMsg) tea.Cmd {
 			cmds = append(cmds, m.sync.FetchScoresCmd())
 		}
 		if len(cmds) == 0 {
-			return nil
+			return cmd
 		}
+		cmds = append(cmds, cmd)
 		return tea.Batch(cmds...)
 	case tea.KeyBackspace, tea.KeyDelete:
 		if len(m.nameInput) > 0 {
@@ -428,7 +511,7 @@ func (m *Model) updateNameEntry(msg tea.KeyMsg) tea.Cmd {
 			m.nameInput += string(msg.Runes)
 		}
 	case tea.KeyEsc:
-		m.screen = screenMenu
+		return m.setScreen(screenMenu)
 	}
 	return nil
 }
@@ -443,6 +526,8 @@ var menuItems = []string{
 
 var configItems = []string{
 	"Sound Effects",
+	"Music",
+	"Volume",
 	"Game Scale",
 	"Score Sync",
 }
