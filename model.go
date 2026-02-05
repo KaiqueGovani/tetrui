@@ -527,19 +527,19 @@ func (m *Model) updateNameEntry(msg tea.KeyMsg) tea.Cmd {
 		if name == "" {
 			name = "AAA"
 		}
-		m.scores = insertScore(m.scores, ScoreEntry{
+		entry := ScoreEntry{
 			Name:  name,
 			Score: m.game.Score,
 			Lines: m.game.Lines,
 			Level: m.game.Level,
 			When:  time.Now().Format("2006-01-02 15:04"),
-		})
+		}
+		m.scores = insertScore(m.scores, entry)
 		_ = saveScores(m.scores)
 		m.scoresOffset = 0
 		cmd := m.setScreen(screenScores)
 		var cmds []tea.Cmd
 		if m.sync != nil && m.sync.Enabled() {
-			entry := m.scores[0]
 			m.syncLoading = true
 			m.syncDots = 0
 			cmds = append(cmds, m.sync.UploadScoreCmd(entry))
