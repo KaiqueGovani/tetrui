@@ -15,6 +15,12 @@ Terminal-based falling-blocks tribute game with a focused TUI, local and synced 
 curl -fsSL https://raw.githubusercontent.com/KaiqueGovani/tetrui/master/install.sh | bash
 ```
 
+### Windows (PowerShell)
+
+```powershell
+iex (iwr "https://raw.githubusercontent.com/KaiqueGovani/tetrui/master/install.ps1")
+```
+
 ### Local build
 
 ```bash

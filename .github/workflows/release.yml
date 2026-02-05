@@ -10,11 +10,15 @@ permissions:
 
 jobs:
   build:
+    environment: actions
     strategy:
       fail-fast: false
       matrix:
         runner: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.runner }}
+    env:
+      TETRUI_SCORE_API_URL: ${{ secrets.TETRUI_SCORE_API_URL }}
+      TETRUI_SCORE_API_KEY: ${{ secrets.TETRUI_SCORE_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
