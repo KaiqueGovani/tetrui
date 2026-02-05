@@ -118,13 +118,7 @@ func (m *MusicPlayer) start(mode MusicMode, loopStart, loopEnd time.Duration) {
 		}
 	}
 	_ = dec.SeekToTime(loopStart)
-	vr := &volumeReader{
-		reader:    dec,
-		getVolume: m.volumeValue,
-	}
-	player := m.ctx.NewPlayer(vr)
-	player.Play()
-	m.player = player
+	m.player = nil
 	m.dec = dec
 	m.stop = make(chan struct{})
 	m.mode = mode
@@ -133,32 +127,36 @@ func (m *MusicPlayer) start(mode MusicMode, loopStart, loopEnd time.Duration) {
 	DebugLogf("music start mode=%v loopStart=%v loopEnd=%v", mode, loopStart, loopEnd)
 
 	go func() {
-		ticker := time.NewTicker(120 * time.Millisecond)
-		defer ticker.Stop()
 		for {
-			select {
-			case <-stop:
+			if isStopped(stop) {
 				return
-			case <-ticker.C:
+			}
+			reader := &loopReader{
+				dec:     dec,
+				loopEnd: loopEnd,
+				stop:    stop,
+			}
+			vr := &volumeReader{
+				reader:    reader,
+				getVolume: m.volumeValue,
+			}
+			player := m.ctx.NewPlayer(vr)
+			player.Play()
+			m.mu.Lock()
+			m.player = player
+			m.mu.Unlock()
+			for player.IsPlaying() {
 				if isStopped(stop) {
+					_ = player.Close()
 					return
 				}
-				if loopEnd > 0 {
-					if dec.Position() >= loopEnd {
-						if isStopped(stop) {
-							return
-						}
-						_ = dec.SeekToTime(loopStart)
-						player.Play()
-					}
-				} else if !player.IsPlaying() {
-					if isStopped(stop) {
-						return
-					}
-					_ = dec.SeekToTime(loopStart)
-					player.Play()
-				}
+				time.Sleep(20 * time.Millisecond)
 			}
+			_ = player.Close()
+			if isStopped(stop) {
+				return
+			}
+			_ = dec.SeekToTime(loopStart)
 		}
 	}()
 }
@@ -231,6 +229,22 @@ func (s *safeDecoder) Duration() time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.dec.Duration()
+}
+
+type loopReader struct {
+	dec     *safeDecoder
+	loopEnd time.Duration
+	stop    <-chan struct{}
+}
+
+func (r *loopReader) Read(p []byte) (int, error) {
+	if isStopped(r.stop) {
+		return 0, io.EOF
+	}
+	if r.loopEnd > 0 && r.dec.Position() >= r.loopEnd {
+		return 0, io.EOF
+	}
+	return r.dec.Read(p)
 }
 
 func (s *safeDecoder) SampleRate() int {
