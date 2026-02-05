@@ -93,9 +93,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.game.Over {
 				cmd := m.setScreen(screenNameEntry)
 				m.nameInput = ""
-				if m.config.Sound {
-					return m, tea.Batch(cmd, playSound(m.sound, SoundGameOver))
-				}
 				return m, cmd
 			}
 			cmds := []tea.Cmd{tickCmd(m.game.FallInterval())}
@@ -290,10 +287,12 @@ func (m *Model) syncMusicForScreen() tea.Cmd {
 	}
 	if m.screen == screenGame {
 		DebugLogf("music sync: start game")
-		return m.music.StartGameCmd()
+		m.music.StartGame()
+		return nil
 	}
 	DebugLogf("music sync: start menu")
-	return m.music.StartMenuCmd()
+	m.music.StartMenu()
+	return nil
 }
 
 func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
@@ -360,9 +359,6 @@ func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 		if m.game.Over {
 			cmd := m.setScreen(screenNameEntry)
 			m.nameInput = ""
-			if m.config.Sound {
-				return tea.Batch(cmd, playSound(m.sound, SoundGameOver))
-			}
 			return cmd
 		}
 		if m.config.Sound {

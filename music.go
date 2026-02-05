@@ -79,7 +79,7 @@ func (m *MusicPlayer) StartGameCmd() tea.Cmd {
 }
 
 func (m *MusicPlayer) StartMenu() {
-	m.start(musicMenu, time.Second, 38*time.Second)
+	m.start(musicMenu, time.Second, 39*time.Second)
 }
 
 func (m *MusicPlayer) StartGame() {
