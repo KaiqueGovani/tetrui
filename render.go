@@ -245,8 +245,13 @@ func viewConfig(m Model) string {
 			}
 			items = append(items, fmt.Sprintf("%s: %s", item, state))
 		case 5:
-			items = append(items, fmt.Sprintf("%s: %dx", item, clampScale(m.config.Scale)))
+			if m.config.HardDropTrace {
+				state = "ON"
+			}
+			items = append(items, fmt.Sprintf("%s: %s", item, state))
 		case 6:
+			items = append(items, fmt.Sprintf("%s: %dx", item, clampScale(m.config.Scale)))
+		case 7:
 			if m.config.Sync {
 				state = "ON"
 			}
@@ -278,7 +283,19 @@ func viewGame(m Model) string {
 		message := fmt.Sprintf("Terminal too small. Need at least %dx%d. Current %dx%d.", minWidth, minHeight, m.width, m.height)
 		return center(m.width, m.height, message)
 	}
-	board := renderBoard(m.game, theme, scale, m.config.Shadow, m.flashRows, m.flashStart, m.flashUntil)
+	board := renderBoard(
+		m.game,
+		theme,
+		scale,
+		m.config.Shadow,
+		m.flashRows,
+		m.flashStart,
+		m.flashUntil,
+		m.hardDropPath,
+		m.hardDropDest,
+		m.hardDropFrom,
+		m.hardDropTil,
+	)
 	readyLabel := ""
 	if m.startCount > 0 {
 		if m.startCount > 1 {
@@ -330,7 +347,7 @@ func levelShiftThemeIndices() []int {
 	return indices
 }
 
-func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []int, flashStart time.Time, flashUntil time.Time) string {
+func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []int, flashStart time.Time, flashUntil time.Time, hardDropPath []Point, hardDropDest []Point, hardDropFrom time.Time, hardDropUntil time.Time) string {
 	border := lipgloss.NewStyle().Foreground(theme.BorderColor)
 	cellEmpty := lipgloss.NewStyle()
 	cellText := strings.Repeat(" ", cellWidth(scale))
@@ -370,7 +387,30 @@ func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []in
 			flashMap[row] = struct{}{}
 		}
 	}
+	hardDropActive := !hardDropUntil.IsZero() && now.Before(hardDropUntil)
+	hardDropPathMap := map[Point]struct{}{}
+	hardDropDestMap := map[Point]struct{}{}
+	hardDropProgress := 1.0
+	hardDropHeadY := boardHeight
+	hardDropDestVisible := true
+	if hardDropActive {
+		hardDropProgress = animationProgress(now, hardDropFrom, hardDropUntil)
+		hardDropHeadY = dropTraceHeadY(hardDropPath, hardDropProgress)
+		hardDropDestVisible = hardDropProgress >= 0.7
+		for _, point := range hardDropPath {
+			if point.Y <= hardDropHeadY {
+				hardDropPathMap[point] = struct{}{}
+			}
+		}
+		if hardDropDestVisible {
+			for _, point := range hardDropDest {
+				hardDropDestMap[point] = struct{}{}
+			}
+		}
+	}
 	whiteStyle := lipgloss.NewStyle().Background(lipgloss.Color("15"))
+	hardDropPathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Faint(true)
+	hardDropPathText := strings.Repeat(".", cellWidth(scale))
 	breakColumns := brokenColumns(now, flashStart, flashUntil)
 	var b strings.Builder
 	b.WriteString(border.Render("+" + strings.Repeat("-", boardWidth*cellWidth(scale)) + "+"))
@@ -379,6 +419,15 @@ func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []in
 		for repeat := 0; repeat < scale; repeat++ {
 			b.WriteString(border.Render("|"))
 			for x := 0; x < boardWidth; x++ {
+				point := Point{X: x, Y: y}
+				if _, ok := hardDropDestMap[point]; ok {
+					b.WriteString(whiteStyle.Render(cellText))
+					continue
+				}
+				if _, ok := hardDropPathMap[point]; ok {
+					b.WriteString(hardDropPathStyle.Render(hardDropPathText))
+					continue
+				}
 				val := board[y][x]
 				_, flashRow := flashMap[y]
 				if flashRow {
@@ -409,6 +458,46 @@ func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []in
 	}
 	b.WriteString(border.Render("+" + strings.Repeat("-", boardWidth*cellWidth(scale)) + "+"))
 	return b.String()
+}
+
+func animationProgress(now, start, until time.Time) float64 {
+	if start.IsZero() || until.IsZero() || !until.After(start) {
+		return 1
+	}
+	if now.Before(start) {
+		return 0
+	}
+	if !now.Before(until) {
+		return 1
+	}
+	return float64(now.Sub(start)) / float64(until.Sub(start))
+}
+
+func dropTraceHeadY(path []Point, progress float64) int {
+	if len(path) == 0 {
+		return boardHeight
+	}
+	minY := boardHeight
+	maxY := -1
+	for _, point := range path {
+		if point.Y < minY {
+			minY = point.Y
+		}
+		if point.Y > maxY {
+			maxY = point.Y
+		}
+	}
+	if maxY < minY {
+		return boardHeight
+	}
+	if progress <= 0 {
+		return minY - 1
+	}
+	if progress >= 1 {
+		return maxY
+	}
+	span := maxY - minY + 1
+	return minY + int(progress*float64(span))
 }
 
 func brokenColumns(now, start, until time.Time) int {

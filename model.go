@@ -33,10 +33,12 @@ type syncTickMsg struct{}
 type lineClearTickMsg struct{}
 type countdownTickMsg struct{}
 type topOutTickMsg struct{}
+type hardDropTraceTickMsg struct{}
 
 const (
 	lineClearFlashDuration    = 140 * time.Millisecond
 	lineClearBigFlashDuration = 160 * time.Millisecond
+	hardDropTraceDuration     = 100 * time.Millisecond
 )
 
 type Model struct {
@@ -68,6 +70,10 @@ type Model struct {
 	lineClearTil time.Time
 	startCount   int
 	topOutTil    time.Time
+	hardDropPath []Point
+	hardDropDest []Point
+	hardDropFrom time.Time
+	hardDropTil  time.Time
 }
 
 func NewModel() Model {
@@ -185,6 +191,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.setScreen(screenNameEntry)
 		m.nameInput = ""
 		return m, cmd
+	case hardDropTraceTickMsg:
+		if m.screen != screenGame || m.hardDropTil.IsZero() {
+			return m, nil
+		}
+		m.updateFlash()
+		if m.isHardDropTraceAnimating() {
+			return m, hardDropTraceTickCmd()
+		}
+		return m, nil
 	case scoresLoadedMsg:
 		if msg.err != nil {
 			DebugLogf("scores fetch error: %v", msg.err)
@@ -277,6 +292,10 @@ func countdownTickCmd() tea.Cmd {
 
 func topOutTickCmd() tea.Cmd {
 	return tea.Tick(16*time.Millisecond, func(time.Time) tea.Msg { return topOutTickMsg{} })
+}
+
+func hardDropTraceTickCmd() tea.Cmd {
+	return tea.Tick(16*time.Millisecond, func(time.Time) tea.Msg { return hardDropTraceTickMsg{} })
 }
 
 func playSound(engine *SoundEngine, event SoundEvent) tea.Cmd {
@@ -476,29 +495,46 @@ func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 	case "down", "j":
 		m.game.SoftDrop()
 	case " ":
+		traceCmd := m.startHardDropTrace()
 		result := m.game.HardDrop()
 		if m.game.Over {
-			return m.startTopOutEffect()
+			topOutCmd := m.startTopOutEffect()
+			if traceCmd != nil {
+				return tea.Batch(traceCmd, topOutCmd)
+			}
+			return topOutCmd
 		}
 		animCmd := m.applyScoreEvent(result)
+		cmds := []tea.Cmd{}
+		if traceCmd != nil {
+			cmds = append(cmds, traceCmd)
+		}
+		if animCmd != nil {
+			cmds = append(cmds, animCmd)
+		}
+		if comboCmd := m.comboSoundCmd(result); comboCmd != nil {
+			cmds = append(cmds, comboCmd)
+		}
 		if m.config.Sound {
 			if result.Cleared == 0 && !result.TSpin {
 				soundCmd := playSound(m.sound, SoundDrop)
-				if animCmd != nil {
-					return tea.Batch(animCmd, soundCmd)
+				cmds = append(cmds, soundCmd)
+				if len(cmds) == 0 {
+					return nil
 				}
-				return soundCmd
+				return tea.Batch(cmds...)
 			}
 			if event, ok := soundEventForAction(result); ok {
 				soundCmd := playSound(m.sound, event)
-				if animCmd != nil {
-					return tea.Batch(animCmd, soundCmd)
+				cmds = append(cmds, soundCmd)
+				if len(cmds) == 0 {
+					return nil
 				}
-				return soundCmd
+				return tea.Batch(cmds...)
 			}
 		}
-		if animCmd != nil {
-			return animCmd
+		if len(cmds) > 0 {
+			return tea.Batch(cmds...)
 		}
 	case "up", "x":
 		m.game.Rotate(1)
@@ -623,8 +659,17 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 			}
 			_ = saveConfig(m.config)
 		case 5:
-			m.adjustScale(1)
+			m.config.HardDropTrace = !m.config.HardDropTrace
+			if !m.config.HardDropTrace {
+				m.hardDropPath = nil
+				m.hardDropDest = nil
+				m.hardDropFrom = time.Time{}
+				m.hardDropTil = time.Time{}
+			}
+			_ = saveConfig(m.config)
 		case 6:
+			m.adjustScale(1)
+		case 7:
 			m.config.Sync = !m.config.Sync
 			if m.sync != nil {
 				m.sync.SetEnabled(m.config.Sync)
@@ -641,7 +686,7 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 				return playSound(m.sound, SoundMenuMove)
 			}
 		}
-		if m.configIndex == 5 {
+		if m.configIndex == 6 {
 			m.adjustScale(-1)
 			if m.config.Sound {
 				return playSound(m.sound, SoundMenuMove)
@@ -654,7 +699,7 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 				return playSound(m.sound, SoundMenuMove)
 			}
 		}
-		if m.configIndex == 5 {
+		if m.configIndex == 6 {
 			m.adjustScale(1)
 			if m.config.Sound {
 				return playSound(m.sound, SoundMenuMove)
@@ -725,6 +770,7 @@ var configItems = []string{
 	"Volume",
 	"Shadow",
 	"Line Clear Animation",
+	"Hard Drop Trace",
 	"Game Scale",
 	"Score Sync",
 }
@@ -783,6 +829,12 @@ func (m *Model) updateFlash() {
 	if !m.topOutTil.IsZero() && time.Now().After(m.topOutTil) {
 		m.topOutTil = time.Time{}
 	}
+	if !m.hardDropTil.IsZero() && time.Now().After(m.hardDropTil) {
+		m.hardDropPath = nil
+		m.hardDropDest = nil
+		m.hardDropFrom = time.Time{}
+		m.hardDropTil = time.Time{}
+	}
 }
 
 func (m *Model) isLineClearAnimating() bool {
@@ -791,6 +843,10 @@ func (m *Model) isLineClearAnimating() bool {
 
 func (m *Model) isTopOutAnimating() bool {
 	return !m.topOutTil.IsZero() && time.Now().Before(m.topOutTil)
+}
+
+func (m *Model) isHardDropTraceAnimating() bool {
+	return !m.hardDropTil.IsZero() && time.Now().Before(m.hardDropTil)
 }
 
 func (m *Model) startTopOutEffect() tea.Cmd {
@@ -813,6 +869,50 @@ func (m *Model) comboSoundCmd(result LockResult) tea.Cmd {
 		return nil
 	}
 	return playComboSound(m.sound, result.Combo, result.BackToBack)
+}
+
+func (m *Model) startHardDropTrace() tea.Cmd {
+	if !m.config.HardDropTrace {
+		return nil
+	}
+	ghostY := m.game.GhostY()
+	if ghostY <= m.game.Y {
+		return nil
+	}
+	pathMap := make(map[Point]struct{})
+	destMap := make(map[Point]struct{})
+	for _, block := range pieceRotations[m.game.Current][m.game.Rotation] {
+		dx := m.game.X + block.X
+		startY := m.game.Y + block.Y
+		destY := ghostY + block.Y
+		if dx < 0 || dx >= boardWidth {
+			continue
+		}
+		if destY >= 0 && destY < boardHeight {
+			destMap[Point{X: dx, Y: destY}] = struct{}{}
+		}
+		for y := startY; y < destY; y++ {
+			if y < 0 || y >= boardHeight {
+				continue
+			}
+			pathMap[Point{X: dx, Y: y}] = struct{}{}
+		}
+	}
+	if len(pathMap) == 0 && len(destMap) == 0 {
+		return nil
+	}
+	m.hardDropPath = make([]Point, 0, len(pathMap))
+	for p := range pathMap {
+		m.hardDropPath = append(m.hardDropPath, p)
+	}
+	m.hardDropDest = make([]Point, 0, len(destMap))
+	for p := range destMap {
+		m.hardDropDest = append(m.hardDropDest, p)
+	}
+	now := time.Now()
+	m.hardDropFrom = now
+	m.hardDropTil = now.Add(hardDropTraceDuration)
+	return hardDropTraceTickCmd()
 }
 
 func (m *Model) applyMoveBuffer() {
