@@ -11,6 +11,30 @@ const (
 	lockDelay   = 250 * time.Millisecond
 )
 
+var levelFallIntervals = []time.Duration{
+	800 * time.Millisecond,
+	720 * time.Millisecond,
+	650 * time.Millisecond,
+	580 * time.Millisecond,
+	520 * time.Millisecond,
+	470 * time.Millisecond,
+	430 * time.Millisecond,
+	390 * time.Millisecond,
+	350 * time.Millisecond,
+	320 * time.Millisecond,
+	290 * time.Millisecond,
+	260 * time.Millisecond,
+	235 * time.Millisecond,
+	210 * time.Millisecond,
+	190 * time.Millisecond,
+	170 * time.Millisecond,
+	155 * time.Millisecond,
+	140 * time.Millisecond,
+	125 * time.Millisecond,
+	110 * time.Millisecond,
+	100 * time.Millisecond,
+}
+
 type Point struct {
 	X int
 	Y int
@@ -65,13 +89,13 @@ func NewGame() Game {
 }
 
 func (g *Game) FallInterval() time.Duration {
-	base := 800 * time.Millisecond
-	step := 60 * time.Millisecond
-	interval := base - time.Duration(g.Level)*step
-	if interval < 100*time.Millisecond {
-		return 100 * time.Millisecond
+	if g.Level < 0 {
+		return levelFallIntervals[0]
 	}
-	return interval
+	if g.Level >= len(levelFallIntervals) {
+		return levelFallIntervals[len(levelFallIntervals)-1]
+	}
+	return levelFallIntervals[g.Level]
 }
 
 func (g *Game) Move(dx int) bool {

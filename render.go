@@ -16,6 +16,8 @@ type Theme struct {
 	PieceColors []lipgloss.Color
 }
 
+const levelShiftThemeName = "Level Shift"
+
 var themes = []Theme{
 	{
 		Name:        "Classic Tetris",
@@ -43,7 +45,49 @@ var themes = []Theme{
 		BorderColor: lipgloss.Color("22"),
 		TextColor:   lipgloss.Color("120"),
 		AccentColor: lipgloss.Color("34"),
-		PieceColors: []lipgloss.Color{"47", "64", "77", "48", "160", "35", "106"},
+		PieceColors: []lipgloss.Color{"47", "64", "77", "48", "71", "35", "106"},
+	},
+	{
+		Name:        "Mono Matrix",
+		BorderColor: lipgloss.Color("250"),
+		TextColor:   lipgloss.Color("245"),
+		AccentColor: lipgloss.Color("82"),
+		PieceColors: []lipgloss.Color{"236", "239", "242", "245", "248", "251", "254"},
+	},
+	{
+		Name:        "Sunset Arcade",
+		BorderColor: lipgloss.Color("209"),
+		TextColor:   lipgloss.Color("223"),
+		AccentColor: lipgloss.Color("214"),
+		PieceColors: []lipgloss.Color{"202", "208", "214", "172", "203", "166", "130"},
+	},
+	{
+		Name:        "Ice Circuit",
+		BorderColor: lipgloss.Color("117"),
+		TextColor:   lipgloss.Color("195"),
+		AccentColor: lipgloss.Color("123"),
+		PieceColors: []lipgloss.Color{"51", "45", "117", "87", "159", "81", "75"},
+	},
+	{
+		Name:        "Retro LCD",
+		BorderColor: lipgloss.Color("100"),
+		TextColor:   lipgloss.Color("113"),
+		AccentColor: lipgloss.Color("149"),
+		PieceColors: []lipgloss.Color{"58", "64", "65", "71", "72", "78", "107"},
+	},
+	{
+		Name:        "Volcanic",
+		BorderColor: lipgloss.Color("203"),
+		TextColor:   lipgloss.Color("223"),
+		AccentColor: lipgloss.Color("214"),
+		PieceColors: []lipgloss.Color{"52", "88", "124", "160", "196", "202", "208"},
+	},
+	{
+		Name:        levelShiftThemeName,
+		BorderColor: lipgloss.Color("15"),
+		TextColor:   lipgloss.Color("250"),
+		AccentColor: lipgloss.Color("226"),
+		PieceColors: []lipgloss.Color{"51", "226", "93", "46", "196", "21", "208"},
 	},
 }
 
@@ -68,8 +112,67 @@ func viewThemes(m Model) string {
 	for _, t := range themes {
 		items = append(items, t.Name)
 	}
-	content := renderMenu("Themes", items, m.themeIndex, "Enter to apply, Esc to back", theme)
+	preview := renderThemeSelectionPreview(theme)
+	menu := renderMenu("Themes", items, m.themeIndex, "Enter to apply, Esc to back", theme)
+	content := lipgloss.JoinVertical(lipgloss.Left, preview, "", menu)
 	return center(m.width, m.height, content)
+}
+
+func renderThemeSelectionPreview(theme Theme) string {
+	if theme.Name != levelShiftThemeName {
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			titleStyle(theme).Render("Theme Preview"),
+			renderPreviewPieceGrid(theme),
+		)
+	}
+
+	indices := levelShiftThemeIndices()
+	if len(indices) == 0 {
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			titleStyle(theme).Render("Theme Preview"),
+			renderPreviewPieceGrid(theme),
+		)
+	}
+
+	previewCount := 3
+	if len(indices) < previewCount {
+		previewCount = len(indices)
+	}
+
+	sections := make([]string, 0, previewCount)
+	for level := 0; level < previewCount; level++ {
+		previewTheme := themes[indices[level]]
+		section := lipgloss.JoinVertical(
+			lipgloss.Left,
+			helpStyle(theme).Render(fmt.Sprintf("Level %d -> %s", level, previewTheme.Name)),
+			renderPreviewPieceGrid(previewTheme),
+		)
+		sections = append(sections, section)
+	}
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		titleStyle(theme).Render("Theme Preview (Level Shift)"),
+		helpStyle(theme).Render("Cycles palette every level during gameplay."),
+		lipgloss.JoinHorizontal(lipgloss.Top, sections...),
+	)
+}
+
+func renderPreviewPieceGrid(theme Theme) string {
+	rowTop := renderPreviewPieceRow(theme, []int{0, 1, 2, 3})
+	rowBottom := renderPreviewPieceRow(theme, []int{4, 5, 6})
+	return lipgloss.JoinVertical(lipgloss.Left, rowTop, rowBottom)
+}
+
+func renderPreviewPieceRow(theme Theme, kinds []int) string {
+	items := make([]string, 0, len(kinds))
+	for _, kind := range kinds {
+		piece := lipgloss.NewStyle().MarginRight(1).Render(renderMiniPiece(kind, theme, 1))
+		items = append(items, piece)
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, items...)
 }
 
 func viewScores(m Model) string {
@@ -168,7 +271,7 @@ func viewNameEntry(m Model) string {
 }
 
 func viewGame(m Model) string {
-	theme := themes[m.themeIndex]
+	theme := resolveGameTheme(m)
 	scale := clampScale(m.config.Scale)
 	minWidth, minHeight := minGameSize(scale)
 	if m.width > 0 && m.height > 0 && (m.width < minWidth || m.height < minHeight) {
@@ -181,6 +284,32 @@ func viewGame(m Model) string {
 		return center(m.width, m.height, lipgloss.JoinHorizontal(lipgloss.Top, board, info))
 	}
 	return center(m.width, m.height, lipgloss.JoinVertical(lipgloss.Left, board, info))
+}
+
+func resolveGameTheme(m Model) Theme {
+	selected := themes[m.themeIndex]
+	if selected.Name != levelShiftThemeName {
+		return selected
+	}
+	indices := levelShiftThemeIndices()
+	if len(indices) == 0 {
+		return selected
+	}
+	if m.game.Level < 0 {
+		return themes[indices[0]]
+	}
+	return themes[indices[m.game.Level%len(indices)]]
+}
+
+func levelShiftThemeIndices() []int {
+	indices := make([]int, 0, len(themes))
+	for i, theme := range themes {
+		if theme.Name == levelShiftThemeName {
+			continue
+		}
+		indices = append(indices, i)
+	}
+	return indices
 }
 
 func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []int, flashStart time.Time, flashUntil time.Time) string {
