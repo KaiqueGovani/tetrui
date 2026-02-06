@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -169,7 +170,7 @@ func viewGame(m Model) string {
 		message := fmt.Sprintf("Terminal too small. Need at least %dx%d. Current %dx%d.", minWidth, minHeight, m.width, m.height)
 		return center(m.width, m.height, message)
 	}
-	board := renderBoard(m.game, theme, scale, m.config.Shadow, m.flashRows, m.flashActive, m.flashCol)
+	board := renderBoard(m.game, theme, scale, m.config.Shadow, m.flashRows, m.flashUntil)
 	info := renderInfo(m.game, theme, scale, m.lastEvent, m.lastDelta)
 	if m.width >= minWidth+24 {
 		return center(m.width, m.height, lipgloss.JoinHorizontal(lipgloss.Top, board, info))
@@ -177,7 +178,7 @@ func viewGame(m Model) string {
 	return center(m.width, m.height, lipgloss.JoinVertical(lipgloss.Left, board, info))
 }
 
-func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []int, flashActive bool, flashCol int) string {
+func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []int, flashUntil time.Time) string {
 	border := lipgloss.NewStyle().Foreground(theme.BorderColor)
 	cellEmpty := lipgloss.NewStyle()
 	cellText := strings.Repeat(" ", cellWidth(scale))
@@ -209,16 +210,11 @@ func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []in
 			board[by][bx] = g.Current + 1
 		}
 	}
+	flashActive := !flashUntil.IsZero() && time.Now().Before(flashUntil)
 	flashMap := map[int]struct{}{}
 	if flashActive {
 		for _, row := range flashRows {
 			flashMap[row] = struct{}{}
-		}
-		if flashCol < 0 {
-			flashCol = 0
-		}
-		if flashCol >= boardWidth {
-			flashCol = boardWidth - 1
 		}
 	}
 	var b strings.Builder
@@ -230,22 +226,24 @@ func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []in
 			for x := 0; x < boardWidth; x++ {
 				val := board[y][x]
 				_, flashRow := flashMap[y]
-				if flashRow && flashActive && x <= flashCol {
-					b.WriteString(lipgloss.NewStyle().Foreground(theme.AccentColor).Render(cellText))
-					continue
-				}
 				if val == 0 {
 					if ghost[y][x] {
 						color := theme.PieceColors[g.Current%len(theme.PieceColors)]
 						ghostText := strings.Repeat(".", cellWidth(scale))
 						b.WriteString(lipgloss.NewStyle().Foreground(color).Faint(true).Render(ghostText))
+					} else if flashRow {
+						b.WriteString(lipgloss.NewStyle().Foreground(theme.AccentColor).Render(cellText))
 					} else {
 						b.WriteString(cellEmpty.Render(cellText))
 					}
 					continue
 				}
 				color := theme.PieceColors[(val-1)%len(theme.PieceColors)]
-				b.WriteString(lipgloss.NewStyle().Background(color).Render(cellText))
+				style := lipgloss.NewStyle().Background(color)
+				if flashRow {
+					style = style.Foreground(theme.AccentColor)
+				}
+				b.WriteString(style.Render(cellText))
 			}
 			b.WriteString(border.Render("|"))
 			b.WriteString("\n")

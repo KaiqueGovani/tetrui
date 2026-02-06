@@ -30,7 +30,6 @@ type scoreUploadedMsg struct {
 }
 
 type syncTickMsg struct{}
-type animTickMsg struct{}
 
 type Model struct {
 	screen       Screen
@@ -51,10 +50,7 @@ type Model struct {
 	syncDots     int
 	music        *MusicPlayer
 	flashRows    []int
-	flashCol     int
-	flashDir     int
-	flashSweeps  int
-	flashActive  bool
+	flashUntil   time.Time
 	lastDelta    int
 	lastEvent    string
 	lastEventTil time.Time
@@ -101,7 +97,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		if m.screen == screenGame && !m.game.Paused && !m.game.Over {
 			result := m.game.Step()
-			m.updateFlashText()
+			m.updateFlash()
 			if m.game.Over {
 				cmd := m.setScreen(screenNameEntry)
 				m.nameInput = ""
@@ -109,9 +105,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			cmds := []tea.Cmd{tickCmd(m.game.FallInterval())}
 			if result.Locked {
-				if cmd := m.applyScoreEvent(result); cmd != nil {
-					cmds = append(cmds, cmd)
-				}
+				m.applyScoreEvent(result)
 			}
 			if event, ok := soundEventForAction(result); ok && m.config.Sound {
 				cmds = append(cmds, playSound(m.sound, event))
@@ -128,14 +122,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.syncLoading {
 			m.syncDots = (m.syncDots + 1) % 4
 			return m, syncTickCmd()
-		}
-		return m, nil
-	case animTickMsg:
-		if m.flashActive {
-			m.advanceFlash()
-			if m.flashActive {
-				return m, animTickCmd()
-			}
 		}
 		return m, nil
 	case scoresLoadedMsg:
@@ -218,10 +204,6 @@ func tickCmd(interval time.Duration) tea.Cmd {
 
 func syncTickCmd() tea.Cmd {
 	return tea.Tick(300*time.Millisecond, func(time.Time) tea.Msg { return syncTickMsg{} })
-}
-
-func animTickCmd() tea.Cmd {
-	return tea.Tick(60*time.Millisecond, func(time.Time) tea.Msg { return animTickMsg{} })
 }
 
 func playSound(engine *SoundEngine, event SoundEvent) tea.Cmd {
@@ -401,20 +383,14 @@ func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 			m.nameInput = ""
 			return cmd
 		}
-		var cmds []tea.Cmd
-		if cmd := m.applyScoreEvent(result); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+		m.applyScoreEvent(result)
 		if m.config.Sound {
 			if result.Cleared == 0 && !result.TSpin {
-				cmds = append(cmds, playSound(m.sound, SoundDrop))
+				return playSound(m.sound, SoundDrop)
 			}
 			if event, ok := soundEventForAction(result); ok {
-				cmds = append(cmds, playSound(m.sound, event))
+				return playSound(m.sound, event)
 			}
-		}
-		if len(cmds) > 0 {
-			return tea.Batch(cmds...)
 		}
 	case "up", "x":
 		m.game.Rotate(1)
@@ -430,7 +406,6 @@ func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 		}
 	case "c":
 		m.game.Hold()
-		return tickCmd(m.game.FallInterval())
 	case "p":
 		m.game.Paused = !m.game.Paused
 	case "q", "esc":
@@ -635,18 +610,14 @@ var configItems = []string{
 	"Score Sync",
 }
 
-func (m *Model) applyScoreEvent(result LockResult) tea.Cmd {
-	var cmd tea.Cmd
+func (m *Model) applyScoreEvent(result LockResult) {
 	if len(result.ClearedRows) > 0 {
 		m.flashRows = append([]int{}, result.ClearedRows...)
-		m.flashDir = 1
-		m.flashCol = 0
-		m.flashSweeps = 1
+		flash := 150 * time.Millisecond
 		if result.TSpin || result.Cleared >= 4 {
-			m.flashSweeps = 2
+			flash = 350 * time.Millisecond
 		}
-		m.flashActive = true
-		cmd = animTickCmd()
+		m.flashUntil = time.Now().Add(flash)
 	}
 	if result.ScoreDelta > 0 {
 		m.lastDelta = result.ScoreDelta
@@ -661,43 +632,17 @@ func (m *Model) applyScoreEvent(result LockResult) tea.Cmd {
 		}
 		m.lastEventTil = time.Now().Add(duration)
 	}
-	return cmd
 }
 
-func (m *Model) updateFlashText() {
+func (m *Model) updateFlash() {
+	if !m.flashUntil.IsZero() && time.Now().After(m.flashUntil) {
+		m.flashRows = nil
+		m.flashUntil = time.Time{}
+	}
 	if !m.lastEventTil.IsZero() && time.Now().After(m.lastEventTil) {
 		m.lastEvent = ""
 		m.lastDelta = 0
 		m.lastEventTil = time.Time{}
-	}
-}
-
-func (m *Model) advanceFlash() {
-	maxCol := boardWidth - 1
-	if m.flashDir > 0 {
-		m.flashCol++
-		if m.flashCol >= maxCol {
-			m.flashSweeps--
-			if m.flashSweeps <= 0 {
-				m.flashActive = false
-				m.flashRows = nil
-				return
-			}
-			m.flashDir = -1
-			m.flashCol = maxCol
-		}
-		return
-	}
-	m.flashCol--
-	if m.flashCol <= 0 {
-		m.flashSweeps--
-		if m.flashSweeps <= 0 {
-			m.flashActive = false
-			m.flashRows = nil
-			return
-		}
-		m.flashDir = 1
-		m.flashCol = 0
 	}
 }
 
