@@ -613,7 +613,11 @@ var configItems = []string{
 func (m *Model) applyScoreEvent(result LockResult) {
 	if len(result.ClearedRows) > 0 {
 		m.flashRows = append([]int{}, result.ClearedRows...)
-		m.flashUntil = time.Now().Add(150 * time.Millisecond)
+		flash := 150 * time.Millisecond
+		if result.TSpin || result.Cleared >= 4 {
+			flash = 350 * time.Millisecond
+		}
+		m.flashUntil = time.Now().Add(flash)
 	}
 	if result.ScoreDelta > 0 {
 		m.lastDelta = result.ScoreDelta
@@ -622,7 +626,11 @@ func (m *Model) applyScoreEvent(result LockResult) {
 		} else {
 			m.lastEvent = "LINE CLEAR"
 		}
-		m.lastEventTil = time.Now().Add(900 * time.Millisecond)
+		duration := 900 * time.Millisecond
+		if result.TSpin || result.Cleared >= 4 {
+			duration = 1400 * time.Millisecond
+		}
+		m.lastEventTil = time.Now().Add(duration)
 	}
 }
 

@@ -115,9 +115,10 @@ func tonesForEvent(event SoundEvent) []toneSpec {
 		}
 	case SoundLine4:
 		return []toneSpec{
-			{frequency: 660, duration: 80 * time.Millisecond, volume: 0.3},
-			{frequency: 880, duration: 80 * time.Millisecond, volume: 0.3},
-			{frequency: 990, duration: 120 * time.Millisecond, volume: 0.3},
+			{frequency: 520, duration: 70 * time.Millisecond, volume: 0.32},
+			{frequency: 780, duration: 70 * time.Millisecond, volume: 0.32},
+			{frequency: 1040, duration: 90 * time.Millisecond, volume: 0.32},
+			{frequency: 1240, duration: 110 * time.Millisecond, volume: 0.32},
 		}
 	case SoundRotate:
 		return []toneSpec{{frequency: 520, duration: 40 * time.Millisecond, volume: 0.25}}
@@ -133,9 +134,9 @@ func tonesForEvent(event SoundEvent) []toneSpec {
 		return []toneSpec{{frequency: 180, duration: 160 * time.Millisecond, volume: 0.28}}
 	case SoundTSpin:
 		return []toneSpec{
-			{frequency: 540, duration: 60 * time.Millisecond, volume: 0.3},
-			{frequency: 720, duration: 60 * time.Millisecond, volume: 0.3},
-			{frequency: 900, duration: 80 * time.Millisecond, volume: 0.3},
+			{frequency: 620, duration: 70 * time.Millisecond, volume: 0.32},
+			{frequency: 860, duration: 70 * time.Millisecond, volume: 0.32},
+			{frequency: 1120, duration: 90 * time.Millisecond, volume: 0.32},
 		}
 	default:
 		return nil

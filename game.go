@@ -8,7 +8,7 @@ import (
 const (
 	boardWidth  = 10
 	boardHeight = 20
-	lockDelay   = 500 * time.Millisecond
+	lockDelay   = 250 * time.Millisecond
 )
 
 type Point struct {
