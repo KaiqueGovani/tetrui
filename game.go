@@ -60,6 +60,8 @@ type Game struct {
 	bag         []int
 	rng         *rand.Rand
 	pendingRows []int
+	Combo       int
+	BackToBack  int
 }
 
 type LockResult struct {
@@ -68,6 +70,8 @@ type LockResult struct {
 	ScoreDelta  int
 	TSpin       bool
 	ClearedRows []int
+	Combo       int
+	BackToBack  int
 }
 
 func NewGame() Game {
@@ -228,6 +232,20 @@ func (g *Game) lockAndSpawn() LockResult {
 		g.pendingRows = append([]int{}, rows...)
 	} else {
 		g.spawnNext()
+	}
+	if cleared > 0 {
+		g.Combo++
+		result.Combo = g.Combo
+		qualifiesBackToBack := (result.TSpin && cleared > 0) || cleared == 4
+		if qualifiesBackToBack {
+			g.BackToBack++
+		} else {
+			g.BackToBack = 0
+		}
+		result.BackToBack = g.BackToBack
+	} else {
+		g.Combo = 0
+		g.BackToBack = 0
 	}
 	g.resetLock()
 	g.lastRotate = false

@@ -279,11 +279,29 @@ func viewGame(m Model) string {
 		return center(m.width, m.height, message)
 	}
 	board := renderBoard(m.game, theme, scale, m.config.Shadow, m.flashRows, m.flashStart, m.flashUntil)
-	info := renderInfo(m.game, theme, scale, m.lastEvent, m.lastDelta)
-	if m.width >= minWidth+24 {
-		return center(m.width, m.height, lipgloss.JoinHorizontal(lipgloss.Top, board, info))
+	readyLabel := ""
+	if m.startCount > 0 {
+		if m.startCount > 1 {
+			readyLabel = "READY"
+		} else {
+			readyLabel = "GO"
+		}
 	}
-	return center(m.width, m.height, lipgloss.JoinVertical(lipgloss.Left, board, info))
+	info := renderInfo(m.game, theme, scale, m.lastEvent, m.lastDelta, readyLabel)
+	content := lipgloss.JoinHorizontal(lipgloss.Top, board, info)
+	if m.width < minWidth+24 {
+		content = lipgloss.JoinVertical(lipgloss.Left, board, info)
+	}
+	if m.isTopOutAnimating() {
+		shake := ((time.Now().UnixNano() / int64(18*time.Millisecond)) % 2)
+		if shake == 0 {
+			content = lipgloss.NewStyle().PaddingLeft(1).Render(content)
+		}
+	}
+	if m.width >= minWidth+24 {
+		return center(m.width, m.height, content)
+	}
+	return center(m.width, m.height, content)
 }
 
 func resolveGameTheme(m Model) Theme {
@@ -420,9 +438,13 @@ func brokenColumns(now, start, until time.Time) int {
 	return columns
 }
 
-func renderInfo(g Game, theme Theme, scale int, lastEvent string, lastDelta int) string {
+func renderInfo(g Game, theme Theme, scale int, lastEvent string, lastDelta int, readyLabel string) string {
 	var b strings.Builder
 	pad := lipgloss.NewStyle().PaddingLeft(2)
+	if readyLabel != "" {
+		b.WriteString(pad.Render(highlightStyle(theme).Render(readyLabel)))
+		b.WriteString("\n\n")
+	}
 	b.WriteString(pad.Render(titleStyle(theme).Render("Next")))
 	b.WriteString("\n")
 	b.WriteString(pad.Render(renderMiniPiece(g.Next, theme, scale)))
@@ -450,6 +472,17 @@ func renderInfo(g Game, theme Theme, scale int, lastEvent string, lastDelta int)
 		b.WriteString("\n")
 		b.WriteString(pad.Render(highlightStyle(theme).Render(fmt.Sprintf("+%d", lastDelta))))
 		b.WriteString("\n\n")
+	}
+	if g.Combo > 1 {
+		b.WriteString(pad.Render(highlightStyle(theme).Render(fmt.Sprintf("Combo x%d", g.Combo))))
+		b.WriteString("\n")
+	}
+	if g.BackToBack > 1 {
+		b.WriteString(pad.Render(highlightStyle(theme).Render(fmt.Sprintf("B2B x%d", g.BackToBack))))
+		b.WriteString("\n")
+	}
+	if g.Combo > 1 || g.BackToBack > 1 {
+		b.WriteString("\n")
 	}
 	keys := []string{
 		"Arrows/HJKL: move",

@@ -31,6 +31,8 @@ type scoreUploadedMsg struct {
 
 type syncTickMsg struct{}
 type lineClearTickMsg struct{}
+type countdownTickMsg struct{}
+type topOutTickMsg struct{}
 
 const (
 	lineClearFlashDuration    = 140 * time.Millisecond
@@ -64,6 +66,8 @@ type Model struct {
 	lastMoveDir  int
 	lastMoveAt   time.Time
 	lineClearTil time.Time
+	startCount   int
+	topOutTil    time.Time
 }
 
 func NewModel() Model {
@@ -104,20 +108,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tickMsg:
 		if m.screen == screenGame && !m.game.Paused && !m.game.Over {
+			if m.startCount > 0 {
+				return m, nil
+			}
 			m.updateFlash()
 			if m.isLineClearAnimating() {
 				return m, tickCmd(m.game.FallInterval())
 			}
 			result := m.game.Step()
 			if m.game.Over {
-				cmd := m.setScreen(screenNameEntry)
-				m.nameInput = ""
-				return m, cmd
+				return m, m.startTopOutEffect()
 			}
 			cmds := []tea.Cmd{tickCmd(m.game.FallInterval())}
 			if result.Locked {
 				if cmd := m.applyScoreEvent(result); cmd != nil {
 					cmds = append(cmds, cmd)
+				}
+				if comboCmd := m.comboSoundCmd(result); comboCmd != nil {
+					cmds = append(cmds, comboCmd)
 				}
 			}
 			if event, ok := soundEventForAction(result); ok && m.config.Sound {
@@ -147,11 +155,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.game.ResolveLineClear()
 		if m.game.Over {
-			cmd := m.setScreen(screenNameEntry)
-			m.nameInput = ""
-			return m, cmd
+			return m, m.startTopOutEffect()
 		}
 		return m, nil
+	case countdownTickMsg:
+		if m.screen != screenGame || m.game.Paused || m.game.Over {
+			return m, nil
+		}
+		if m.startCount <= 0 {
+			return m, tickCmd(m.game.FallInterval())
+		}
+		m.startCount--
+		if m.startCount > 0 {
+			return m, countdownTickCmd()
+		}
+		if m.config.Sound {
+			return m, tea.Batch(playSound(m.sound, SoundMenuSelect), tickCmd(m.game.FallInterval()))
+		}
+		return m, tickCmd(m.game.FallInterval())
+	case topOutTickMsg:
+		if m.screen != screenGame || m.topOutTil.IsZero() {
+			return m, nil
+		}
+		m.updateFlash()
+		if m.isTopOutAnimating() {
+			return m, topOutTickCmd()
+		}
+		m.topOutTil = time.Time{}
+		cmd := m.setScreen(screenNameEntry)
+		m.nameInput = ""
+		return m, cmd
 	case scoresLoadedMsg:
 		if msg.err != nil {
 			DebugLogf("scores fetch error: %v", msg.err)
@@ -238,10 +271,27 @@ func lineClearTickCmd() tea.Cmd {
 	return tea.Tick(16*time.Millisecond, func(time.Time) tea.Msg { return lineClearTickMsg{} })
 }
 
+func countdownTickCmd() tea.Cmd {
+	return tea.Tick(380*time.Millisecond, func(time.Time) tea.Msg { return countdownTickMsg{} })
+}
+
+func topOutTickCmd() tea.Cmd {
+	return tea.Tick(16*time.Millisecond, func(time.Time) tea.Msg { return topOutTickMsg{} })
+}
+
 func playSound(engine *SoundEngine, event SoundEvent) tea.Cmd {
 	return func() tea.Msg {
 		if engine != nil {
 			engine.Play(event)
+		}
+		return soundMsg{}
+	}
+}
+
+func playComboSound(engine *SoundEngine, combo, backToBack int) tea.Cmd {
+	return func() tea.Msg {
+		if engine != nil {
+			engine.PlayCombo(combo, backToBack)
 		}
 		return soundMsg{}
 	}
@@ -365,7 +415,8 @@ func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
 		switch m.menuIndex {
 		case 0:
 			m.game = NewGame()
-			return tea.Batch(cmd, m.setScreen(screenGame), tickCmd(m.game.FallInterval()))
+			m.startCount = 2
+			return tea.Batch(cmd, m.setScreen(screenGame), countdownTickCmd())
 		case 1:
 			return tea.Batch(cmd, m.setScreen(screenThemes))
 		case 2:
@@ -389,6 +440,14 @@ func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
+	if m.startCount > 0 {
+		switch msg.String() {
+		case "q", "esc":
+			return m.setScreen(screenMenu)
+		}
+		return nil
+	}
+
 	if m.isLineClearAnimating() {
 		switch msg.String() {
 		case "q", "esc":
@@ -419,9 +478,7 @@ func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 	case " ":
 		result := m.game.HardDrop()
 		if m.game.Over {
-			cmd := m.setScreen(screenNameEntry)
-			m.nameInput = ""
-			return cmd
+			return m.startTopOutEffect()
 		}
 		animCmd := m.applyScoreEvent(result)
 		if m.config.Sound {
@@ -723,10 +780,39 @@ func (m *Model) updateFlash() {
 		m.lastDelta = 0
 		m.lastEventTil = time.Time{}
 	}
+	if !m.topOutTil.IsZero() && time.Now().After(m.topOutTil) {
+		m.topOutTil = time.Time{}
+	}
 }
 
 func (m *Model) isLineClearAnimating() bool {
 	return !m.lineClearTil.IsZero() && time.Now().Before(m.lineClearTil)
+}
+
+func (m *Model) isTopOutAnimating() bool {
+	return !m.topOutTil.IsZero() && time.Now().Before(m.topOutTil)
+}
+
+func (m *Model) startTopOutEffect() tea.Cmd {
+	m.flashRows = make([]int, boardHeight)
+	for i := 0; i < boardHeight; i++ {
+		m.flashRows[i] = i
+	}
+	m.flashStart = time.Now()
+	m.flashUntil = m.flashStart.Add(240 * time.Millisecond)
+	m.topOutTil = m.flashUntil
+	cmds := []tea.Cmd{topOutTickCmd()}
+	if m.config.Sound {
+		cmds = append(cmds, playSound(m.sound, SoundGameOver))
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *Model) comboSoundCmd(result LockResult) tea.Cmd {
+	if !m.config.Sound || result.Combo <= 1 {
+		return nil
+	}
+	return playComboSound(m.sound, result.Combo, result.BackToBack)
 }
 
 func (m *Model) applyMoveBuffer() {

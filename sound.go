@@ -90,6 +90,31 @@ func (s *SoundEngine) Play(event SoundEvent) {
 	}()
 }
 
+func (s *SoundEngine) PlayCombo(combo, backToBack int) {
+	s.mu.RLock()
+	ctx := s.ctx
+	enabled := s.enabled
+	volume := s.volume
+	s.mu.RUnlock()
+	if !enabled || ctx == nil {
+		return
+	}
+	sequence := tonesForCombo(combo, backToBack)
+	if len(sequence) == 0 {
+		return
+	}
+	go func() {
+		buffer := renderToneSequence(sequence, s.sampleRate, volume)
+		reader := bytes.NewReader(buffer)
+		player := ctx.NewPlayer(reader)
+		player.Play()
+		for player.IsPlaying() {
+			time.Sleep(5 * time.Millisecond)
+		}
+		_ = player.Close()
+	}()
+}
+
 type toneSpec struct {
 	frequency float64
 	duration  time.Duration
@@ -141,6 +166,21 @@ func tonesForEvent(event SoundEvent) []toneSpec {
 	default:
 		return nil
 	}
+}
+
+func tonesForCombo(combo, backToBack int) []toneSpec {
+	if combo <= 1 {
+		return nil
+	}
+	if combo > 10 {
+		combo = 10
+	}
+	base := 480.0 + float64(combo-1)*45
+	sequence := []toneSpec{{frequency: base, duration: 65 * time.Millisecond, volume: 0.28}}
+	if backToBack > 1 {
+		sequence = append(sequence, toneSpec{frequency: base + 160, duration: 80 * time.Millisecond, volume: 0.3})
+	}
+	return sequence
 }
 
 func renderToneSequence(sequence []toneSpec, sampleRate int, masterVolume float64) []byte {
