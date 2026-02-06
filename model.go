@@ -31,6 +31,11 @@ type scoreUploadedMsg struct {
 
 type syncTickMsg struct{}
 
+const (
+	lineClearFlashDuration    = 70 * time.Millisecond
+	lineClearBigFlashDuration = 80 * time.Millisecond
+)
+
 type Model struct {
 	screen       Screen
 	width        int
@@ -56,6 +61,7 @@ type Model struct {
 	lastEventTil time.Time
 	lastMoveDir  int
 	lastMoveAt   time.Time
+	lineClearTil time.Time
 }
 
 func NewModel() Model {
@@ -96,8 +102,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tickMsg:
 		if m.screen == screenGame && !m.game.Paused && !m.game.Over {
-			result := m.game.Step()
 			m.updateFlash()
+			if m.isLineClearAnimating() {
+				return m, tickCmd(m.game.FallInterval())
+			}
+			result := m.game.Step()
 			if m.game.Over {
 				cmd := m.setScreen(screenNameEntry)
 				m.nameInput = ""
@@ -357,6 +366,14 @@ func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
+	if m.isLineClearAnimating() {
+		switch msg.String() {
+		case "q", "esc":
+			return m.setScreen(screenMenu)
+		}
+		return nil
+	}
+
 	switch msg.String() {
 	case "left", "h":
 		m.lastMoveDir = -1
@@ -613,11 +630,12 @@ var configItems = []string{
 func (m *Model) applyScoreEvent(result LockResult) {
 	if len(result.ClearedRows) > 0 {
 		m.flashRows = append([]int{}, result.ClearedRows...)
-		flash := 150 * time.Millisecond
+		flash := lineClearFlashDuration
 		if result.TSpin || result.Cleared >= 4 {
-			flash = 350 * time.Millisecond
+			flash = lineClearBigFlashDuration
 		}
 		m.flashUntil = time.Now().Add(flash)
+		m.lineClearTil = m.flashUntil
 	}
 	if result.ScoreDelta > 0 {
 		m.lastDelta = result.ScoreDelta
@@ -639,11 +657,18 @@ func (m *Model) updateFlash() {
 		m.flashRows = nil
 		m.flashUntil = time.Time{}
 	}
+	if !m.lineClearTil.IsZero() && time.Now().After(m.lineClearTil) {
+		m.lineClearTil = time.Time{}
+	}
 	if !m.lastEventTil.IsZero() && time.Now().After(m.lastEventTil) {
 		m.lastEvent = ""
 		m.lastDelta = 0
 		m.lastEventTil = time.Time{}
 	}
+}
+
+func (m *Model) isLineClearAnimating() bool {
+	return !m.lineClearTil.IsZero() && time.Now().Before(m.lineClearTil)
 }
 
 func (m *Model) applyMoveBuffer() {
