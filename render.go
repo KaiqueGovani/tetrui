@@ -131,8 +131,13 @@ func viewConfig(m Model) string {
 		case 2:
 			items = append(items, fmt.Sprintf("%s: %d%%", item, clampVolumePercent(m.config.Volume)))
 		case 3:
-			items = append(items, fmt.Sprintf("%s: %dx", item, clampScale(m.config.Scale)))
+			if m.config.Shadow {
+				state = "ON"
+			}
+			items = append(items, fmt.Sprintf("%s: %s", item, state))
 		case 4:
+			items = append(items, fmt.Sprintf("%s: %dx", item, clampScale(m.config.Scale)))
+		case 5:
 			if m.config.Sync {
 				state = "ON"
 			}
@@ -164,7 +169,7 @@ func viewGame(m Model) string {
 		message := fmt.Sprintf("Terminal too small. Need at least %dx%d. Current %dx%d.", minWidth, minHeight, m.width, m.height)
 		return center(m.width, m.height, message)
 	}
-	board := renderBoard(m.game, theme, scale)
+	board := renderBoard(m.game, theme, scale, m.config.Shadow)
 	info := renderInfo(m.game, theme, scale)
 	if m.width >= minWidth+24 {
 		return center(m.width, m.height, lipgloss.JoinHorizontal(lipgloss.Top, board, info))
@@ -172,7 +177,7 @@ func viewGame(m Model) string {
 	return center(m.width, m.height, lipgloss.JoinVertical(lipgloss.Left, board, info))
 }
 
-func renderBoard(g Game, theme Theme, scale int) string {
+func renderBoard(g Game, theme Theme, scale int, showShadow bool) string {
 	border := lipgloss.NewStyle().Foreground(theme.BorderColor)
 	cellEmpty := lipgloss.NewStyle()
 	cellText := strings.Repeat(" ", cellWidth(scale))
@@ -180,6 +185,22 @@ func renderBoard(g Game, theme Theme, scale int) string {
 	for y := range board {
 		board[y] = make([]int, boardWidth)
 		copy(board[y], g.Board[y])
+	}
+	ghost := make([][]bool, boardHeight)
+	for y := range ghost {
+		ghost[y] = make([]bool, boardWidth)
+	}
+	ghostY := g.GhostY()
+	if showShadow && ghostY != g.Y {
+		for _, p := range pieceRotations[g.Current][g.Rotation] {
+			bx := g.X + p.X
+			by := ghostY + p.Y
+			if by >= 0 && by < boardHeight && bx >= 0 && bx < boardWidth {
+				if board[by][bx] == 0 {
+					ghost[by][bx] = true
+				}
+			}
+		}
 	}
 	for _, p := range pieceRotations[g.Current][g.Rotation] {
 		bx := g.X + p.X
@@ -197,7 +218,13 @@ func renderBoard(g Game, theme Theme, scale int) string {
 			for x := 0; x < boardWidth; x++ {
 				val := board[y][x]
 				if val == 0 {
-					b.WriteString(cellEmpty.Render(cellText))
+					if ghost[y][x] {
+						color := theme.PieceColors[g.Current%len(theme.PieceColors)]
+						ghostText := strings.Repeat(".", cellWidth(scale))
+						b.WriteString(lipgloss.NewStyle().Foreground(color).Faint(true).Render(ghostText))
+					} else {
+						b.WriteString(cellEmpty.Render(cellText))
+					}
 					continue
 				}
 				color := theme.PieceColors[(val-1)%len(theme.PieceColors)]

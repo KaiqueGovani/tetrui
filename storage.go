@@ -14,6 +14,7 @@ type Config struct {
 	Theme  string `json:"theme"`
 	Sound  bool   `json:"sound"`
 	Music  bool   `json:"music"`
+	Shadow bool   `json:"shadow"`
 	Scale  int    `json:"scale"`
 	Sync   bool   `json:"sync"`
 	Volume int    `json:"volume"`
@@ -32,6 +33,7 @@ func loadConfig() (Config, error) {
 		Theme:  themes[0].Name,
 		Sound:  true,
 		Music:  true,
+		Shadow: true,
 		Scale:  1,
 		Sync:   true,
 		Volume: 70,
@@ -53,6 +55,9 @@ func loadConfig() (Config, error) {
 	if !bytes.Contains(data, []byte("\"music\"")) {
 		config.Music = true
 	}
+	if !bytes.Contains(data, []byte("\"shadow\"")) {
+		config.Shadow = true
+	}
 	if !bytes.Contains(data, []byte("\"volume\"")) {
 		config.Volume = 70
 	}
@@ -61,6 +66,9 @@ func loadConfig() (Config, error) {
 	}
 	if config.Scale < 1 {
 		config.Scale = 1
+	}
+	if !config.Shadow {
+		config.Shadow = true
 	}
 	if config.Volume < 0 {
 		config.Volume = 0

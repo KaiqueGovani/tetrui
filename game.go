@@ -241,6 +241,14 @@ func (g *Game) refillBag() {
 	g.bag = bag
 }
 
+func (g *Game) GhostY() int {
+	y := g.Y
+	for !g.collides(g.X, y+1, g.Rotation) {
+		y++
+	}
+	return y
+}
+
 var pieceRotations = [7][4][]Point{
 	// I
 	{

@@ -290,8 +290,8 @@ func (m *Model) syncMusicForScreen() tea.Cmd {
 		m.music.StartGame()
 		return nil
 	}
-	DebugLogf("music sync: start menu")
-	m.music.StartMenu()
+	DebugLogf("music sync: stop (non-game)")
+	m.music.Stop()
 	return nil
 }
 
@@ -477,8 +477,11 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 		case 2:
 			m.adjustVolume(5)
 		case 3:
-			m.adjustScale(1)
+			m.config.Shadow = !m.config.Shadow
+			_ = saveConfig(m.config)
 		case 4:
+			m.adjustScale(1)
+		case 5:
 			m.config.Sync = !m.config.Sync
 			if m.sync != nil {
 				m.sync.SetEnabled(m.config.Sync)
@@ -495,7 +498,7 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 				return playSound(m.sound, SoundMenuMove)
 			}
 		}
-		if m.configIndex == 3 {
+		if m.configIndex == 4 {
 			m.adjustScale(-1)
 			if m.config.Sound {
 				return playSound(m.sound, SoundMenuMove)
@@ -508,7 +511,7 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 				return playSound(m.sound, SoundMenuMove)
 			}
 		}
-		if m.configIndex == 3 {
+		if m.configIndex == 4 {
 			m.adjustScale(1)
 			if m.config.Sound {
 				return playSound(m.sound, SoundMenuMove)
@@ -577,6 +580,7 @@ var configItems = []string{
 	"Sound Effects",
 	"Music",
 	"Volume",
+	"Shadow",
 	"Game Scale",
 	"Score Sync",
 }
