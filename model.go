@@ -30,10 +30,11 @@ type scoreUploadedMsg struct {
 }
 
 type syncTickMsg struct{}
+type lineClearTickMsg struct{}
 
 const (
-	lineClearFlashDuration    = 70 * time.Millisecond
-	lineClearBigFlashDuration = 80 * time.Millisecond
+	lineClearFlashDuration    = 140 * time.Millisecond
+	lineClearBigFlashDuration = 160 * time.Millisecond
 )
 
 type Model struct {
@@ -55,6 +56,7 @@ type Model struct {
 	syncDots     int
 	music        *MusicPlayer
 	flashRows    []int
+	flashStart   time.Time
 	flashUntil   time.Time
 	lastDelta    int
 	lastEvent    string
@@ -114,7 +116,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			cmds := []tea.Cmd{tickCmd(m.game.FallInterval())}
 			if result.Locked {
-				m.applyScoreEvent(result)
+				if cmd := m.applyScoreEvent(result); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			}
 			if event, ok := soundEventForAction(result); ok && m.config.Sound {
 				cmds = append(cmds, playSound(m.sound, event))
@@ -131,6 +135,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.syncLoading {
 			m.syncDots = (m.syncDots + 1) % 4
 			return m, syncTickCmd()
+		}
+		return m, nil
+	case lineClearTickMsg:
+		if m.screen != screenGame || m.game.Over {
+			return m, nil
+		}
+		m.updateFlash()
+		if m.isLineClearAnimating() {
+			return m, lineClearTickCmd()
+		}
+		m.game.ResolveLineClear()
+		if m.game.Over {
+			cmd := m.setScreen(screenNameEntry)
+			m.nameInput = ""
+			return m, cmd
 		}
 		return m, nil
 	case scoresLoadedMsg:
@@ -213,6 +232,10 @@ func tickCmd(interval time.Duration) tea.Cmd {
 
 func syncTickCmd() tea.Cmd {
 	return tea.Tick(300*time.Millisecond, func(time.Time) tea.Msg { return syncTickMsg{} })
+}
+
+func lineClearTickCmd() tea.Cmd {
+	return tea.Tick(16*time.Millisecond, func(time.Time) tea.Msg { return lineClearTickMsg{} })
 }
 
 func playSound(engine *SoundEngine, event SoundEvent) tea.Cmd {
@@ -400,14 +423,25 @@ func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 			m.nameInput = ""
 			return cmd
 		}
-		m.applyScoreEvent(result)
+		animCmd := m.applyScoreEvent(result)
 		if m.config.Sound {
 			if result.Cleared == 0 && !result.TSpin {
-				return playSound(m.sound, SoundDrop)
+				soundCmd := playSound(m.sound, SoundDrop)
+				if animCmd != nil {
+					return tea.Batch(animCmd, soundCmd)
+				}
+				return soundCmd
 			}
 			if event, ok := soundEventForAction(result); ok {
-				return playSound(m.sound, event)
+				soundCmd := playSound(m.sound, event)
+				if animCmd != nil {
+					return tea.Batch(animCmd, soundCmd)
+				}
+				return soundCmd
 			}
+		}
+		if animCmd != nil {
+			return animCmd
 		}
 	case "up", "x":
 		m.game.Rotate(1)
@@ -522,8 +556,18 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 			m.config.Shadow = !m.config.Shadow
 			_ = saveConfig(m.config)
 		case 4:
-			m.adjustScale(1)
+			m.config.Animations = !m.config.Animations
+			if !m.config.Animations {
+				m.flashRows = nil
+				m.flashStart = time.Time{}
+				m.flashUntil = time.Time{}
+				m.lineClearTil = time.Time{}
+				m.game.ResolveLineClear()
+			}
+			_ = saveConfig(m.config)
 		case 5:
+			m.adjustScale(1)
+		case 6:
 			m.config.Sync = !m.config.Sync
 			if m.sync != nil {
 				m.sync.SetEnabled(m.config.Sync)
@@ -540,7 +584,7 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 				return playSound(m.sound, SoundMenuMove)
 			}
 		}
-		if m.configIndex == 4 {
+		if m.configIndex == 5 {
 			m.adjustScale(-1)
 			if m.config.Sound {
 				return playSound(m.sound, SoundMenuMove)
@@ -553,7 +597,7 @@ func (m *Model) updateConfig(msg tea.KeyMsg) tea.Cmd {
 				return playSound(m.sound, SoundMenuMove)
 			}
 		}
-		if m.configIndex == 4 {
+		if m.configIndex == 5 {
 			m.adjustScale(1)
 			if m.config.Sound {
 				return playSound(m.sound, SoundMenuMove)
@@ -623,19 +667,31 @@ var configItems = []string{
 	"Music",
 	"Volume",
 	"Shadow",
+	"Line Clear Animation",
 	"Game Scale",
 	"Score Sync",
 }
 
-func (m *Model) applyScoreEvent(result LockResult) {
+func (m *Model) applyScoreEvent(result LockResult) tea.Cmd {
+	var animCmd tea.Cmd
 	if len(result.ClearedRows) > 0 {
-		m.flashRows = append([]int{}, result.ClearedRows...)
-		flash := lineClearFlashDuration
-		if result.TSpin || result.Cleared >= 4 {
-			flash = lineClearBigFlashDuration
+		if m.config.Animations {
+			m.flashRows = append([]int{}, result.ClearedRows...)
+			flash := lineClearFlashDuration
+			if result.TSpin || result.Cleared >= 4 {
+				flash = lineClearBigFlashDuration
+			}
+			m.flashStart = time.Now()
+			m.flashUntil = m.flashStart.Add(flash)
+			m.lineClearTil = m.flashUntil
+			animCmd = lineClearTickCmd()
+		} else {
+			m.flashRows = nil
+			m.flashStart = time.Time{}
+			m.flashUntil = time.Time{}
+			m.lineClearTil = time.Time{}
+			m.game.ResolveLineClear()
 		}
-		m.flashUntil = time.Now().Add(flash)
-		m.lineClearTil = m.flashUntil
 	}
 	if result.ScoreDelta > 0 {
 		m.lastDelta = result.ScoreDelta
@@ -650,11 +706,13 @@ func (m *Model) applyScoreEvent(result LockResult) {
 		}
 		m.lastEventTil = time.Now().Add(duration)
 	}
+	return animCmd
 }
 
 func (m *Model) updateFlash() {
 	if !m.flashUntil.IsZero() && time.Now().After(m.flashUntil) {
 		m.flashRows = nil
+		m.flashStart = time.Time{}
 		m.flashUntil = time.Time{}
 	}
 	if !m.lineClearTil.IsZero() && time.Now().After(m.lineClearTil) {

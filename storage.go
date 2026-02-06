@@ -11,13 +11,14 @@ import (
 )
 
 type Config struct {
-	Theme  string `json:"theme"`
-	Sound  bool   `json:"sound"`
-	Music  bool   `json:"music"`
-	Shadow bool   `json:"shadow"`
-	Scale  int    `json:"scale"`
-	Sync   bool   `json:"sync"`
-	Volume int    `json:"volume"`
+	Theme      string `json:"theme"`
+	Sound      bool   `json:"sound"`
+	Music      bool   `json:"music"`
+	Shadow     bool   `json:"shadow"`
+	Animations bool   `json:"animations"`
+	Scale      int    `json:"scale"`
+	Sync       bool   `json:"sync"`
+	Volume     int    `json:"volume"`
 }
 
 type ScoreEntry struct {
@@ -30,13 +31,14 @@ type ScoreEntry struct {
 
 func loadConfig() (Config, error) {
 	config := Config{
-		Theme:  themes[0].Name,
-		Sound:  true,
-		Music:  true,
-		Shadow: true,
-		Scale:  1,
-		Sync:   true,
-		Volume: 70,
+		Theme:      themes[0].Name,
+		Sound:      true,
+		Music:      true,
+		Shadow:     true,
+		Animations: true,
+		Scale:      1,
+		Sync:       true,
+		Volume:     70,
 	}
 	path, err := configPath()
 	if err != nil {
@@ -57,6 +59,9 @@ func loadConfig() (Config, error) {
 	}
 	if !bytes.Contains(data, []byte("\"shadow\"")) {
 		config.Shadow = true
+	}
+	if !bytes.Contains(data, []byte("\"animations\"")) {
+		config.Animations = true
 	}
 	if !bytes.Contains(data, []byte("\"volume\"")) {
 		config.Volume = 70

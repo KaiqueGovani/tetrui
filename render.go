@@ -137,8 +137,13 @@ func viewConfig(m Model) string {
 			}
 			items = append(items, fmt.Sprintf("%s: %s", item, state))
 		case 4:
-			items = append(items, fmt.Sprintf("%s: %dx", item, clampScale(m.config.Scale)))
+			if m.config.Animations {
+				state = "ON"
+			}
+			items = append(items, fmt.Sprintf("%s: %s", item, state))
 		case 5:
+			items = append(items, fmt.Sprintf("%s: %dx", item, clampScale(m.config.Scale)))
+		case 6:
 			if m.config.Sync {
 				state = "ON"
 			}
@@ -170,7 +175,7 @@ func viewGame(m Model) string {
 		message := fmt.Sprintf("Terminal too small. Need at least %dx%d. Current %dx%d.", minWidth, minHeight, m.width, m.height)
 		return center(m.width, m.height, message)
 	}
-	board := renderBoard(m.game, theme, scale, m.config.Shadow, m.flashRows, m.flashUntil)
+	board := renderBoard(m.game, theme, scale, m.config.Shadow, m.flashRows, m.flashStart, m.flashUntil)
 	info := renderInfo(m.game, theme, scale, m.lastEvent, m.lastDelta)
 	if m.width >= minWidth+24 {
 		return center(m.width, m.height, lipgloss.JoinHorizontal(lipgloss.Top, board, info))
@@ -178,7 +183,7 @@ func viewGame(m Model) string {
 	return center(m.width, m.height, lipgloss.JoinVertical(lipgloss.Left, board, info))
 }
 
-func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []int, flashUntil time.Time) string {
+func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []int, flashStart time.Time, flashUntil time.Time) string {
 	border := lipgloss.NewStyle().Foreground(theme.BorderColor)
 	cellEmpty := lipgloss.NewStyle()
 	cellText := strings.Repeat(" ", cellWidth(scale))
@@ -210,13 +215,16 @@ func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []in
 			board[by][bx] = g.Current + 1
 		}
 	}
-	flashActive := !flashUntil.IsZero() && time.Now().Before(flashUntil)
+	now := time.Now()
+	flashActive := !flashUntil.IsZero() && now.Before(flashUntil)
 	flashMap := map[int]struct{}{}
 	if flashActive {
 		for _, row := range flashRows {
 			flashMap[row] = struct{}{}
 		}
 	}
+	whiteStyle := lipgloss.NewStyle().Background(lipgloss.Color("15"))
+	breakColumns := brokenColumns(now, flashStart, flashUntil)
 	var b strings.Builder
 	b.WriteString(border.Render("+" + strings.Repeat("-", boardWidth*cellWidth(scale)) + "+"))
 	b.WriteString("\n")
@@ -226,13 +234,19 @@ func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []in
 			for x := 0; x < boardWidth; x++ {
 				val := board[y][x]
 				_, flashRow := flashMap[y]
+				if flashRow {
+					if x < breakColumns {
+						b.WriteString(cellEmpty.Render(cellText))
+					} else {
+						b.WriteString(whiteStyle.Render(cellText))
+					}
+					continue
+				}
 				if val == 0 {
 					if ghost[y][x] {
 						color := theme.PieceColors[g.Current%len(theme.PieceColors)]
 						ghostText := strings.Repeat(".", cellWidth(scale))
 						b.WriteString(lipgloss.NewStyle().Foreground(color).Faint(true).Render(ghostText))
-					} else if flashRow {
-						b.WriteString(lipgloss.NewStyle().Foreground(theme.AccentColor).Render(cellText))
 					} else {
 						b.WriteString(cellEmpty.Render(cellText))
 					}
@@ -240,9 +254,6 @@ func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []in
 				}
 				color := theme.PieceColors[(val-1)%len(theme.PieceColors)]
 				style := lipgloss.NewStyle().Background(color)
-				if flashRow {
-					style = style.Foreground(theme.AccentColor)
-				}
 				b.WriteString(style.Render(cellText))
 			}
 			b.WriteString(border.Render("|"))
@@ -251,6 +262,33 @@ func renderBoard(g Game, theme Theme, scale int, showShadow bool, flashRows []in
 	}
 	b.WriteString(border.Render("+" + strings.Repeat("-", boardWidth*cellWidth(scale)) + "+"))
 	return b.String()
+}
+
+func brokenColumns(now, start, until time.Time) int {
+	if start.IsZero() || until.IsZero() || !until.After(start) {
+		return 0
+	}
+	elapsed := now.Sub(start)
+	if elapsed <= 0 {
+		return 0
+	}
+	duration := until.Sub(start)
+	if elapsed >= duration {
+		return boardWidth
+	}
+	progress := float64(elapsed) / float64(duration)
+	if progress <= 0.35 {
+		return 0
+	}
+	breakProgress := (progress - 0.35) / 0.65
+	columns := int(breakProgress*float64(boardWidth)) + 1
+	if columns < 0 {
+		return 0
+	}
+	if columns > boardWidth {
+		return boardWidth
+	}
+	return columns
 }
 
 func renderInfo(g Game, theme Theme, scale int, lastEvent string, lastDelta int) string {

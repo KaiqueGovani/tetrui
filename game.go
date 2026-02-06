@@ -17,24 +17,25 @@ type Point struct {
 }
 
 type Game struct {
-	Board      [][]int
-	X          int
-	Y          int
-	Rotation   int
-	Current    int
-	Next       int
-	HoldKind   int
-	HasHold    bool
-	CanHold    bool
-	Score      int
-	Lines      int
-	Level      int
-	Over       bool
-	Paused     bool
-	lockStart  time.Time
-	lastRotate bool
-	bag        []int
-	rng        *rand.Rand
+	Board       [][]int
+	X           int
+	Y           int
+	Rotation    int
+	Current     int
+	Next        int
+	HoldKind    int
+	HasHold     bool
+	CanHold     bool
+	Score       int
+	Lines       int
+	Level       int
+	Over        bool
+	Paused      bool
+	lockStart   time.Time
+	lastRotate  bool
+	bag         []int
+	rng         *rand.Rand
+	pendingRows []int
 }
 
 type LockResult struct {
@@ -74,7 +75,7 @@ func (g *Game) FallInterval() time.Duration {
 }
 
 func (g *Game) Move(dx int) bool {
-	if g.Over || g.Paused {
+	if g.Over || g.Paused || g.hasPendingLineClear() {
 		return false
 	}
 	if !g.collides(g.X+dx, g.Y, g.Rotation) {
@@ -87,7 +88,7 @@ func (g *Game) Move(dx int) bool {
 }
 
 func (g *Game) SoftDrop() {
-	if g.Over || g.Paused {
+	if g.Over || g.Paused || g.hasPendingLineClear() {
 		return
 	}
 	if !g.collides(g.X, g.Y+1, g.Rotation) {
@@ -99,7 +100,7 @@ func (g *Game) SoftDrop() {
 }
 
 func (g *Game) HardDrop() LockResult {
-	if g.Over || g.Paused {
+	if g.Over || g.Paused || g.hasPendingLineClear() {
 		return LockResult{}
 	}
 	distance := 0
@@ -116,7 +117,7 @@ func (g *Game) HardDrop() LockResult {
 }
 
 func (g *Game) Rotate(dir int) {
-	if g.Over || g.Paused {
+	if g.Over || g.Paused || g.hasPendingLineClear() {
 		return
 	}
 	newRot := (g.Rotation + dir + 4) % 4
@@ -138,7 +139,7 @@ func (g *Game) Rotate(dir int) {
 }
 
 func (g *Game) Hold() {
-	if g.Over || g.Paused || !g.CanHold {
+	if g.Over || g.Paused || !g.CanHold || g.hasPendingLineClear() {
 		return
 	}
 	if !g.HasHold {
@@ -157,7 +158,7 @@ func (g *Game) Hold() {
 }
 
 func (g *Game) Step() LockResult {
-	if g.Over || g.Paused {
+	if g.Over || g.Paused || g.hasPendingLineClear() {
 		return LockResult{}
 	}
 	if !g.collides(g.X, g.Y+1, g.Rotation) {
@@ -181,7 +182,8 @@ func (g *Game) lockAndSpawn() LockResult {
 	result := LockResult{}
 	result.TSpin = g.isTSpin()
 	g.lockPiece()
-	cleared, rows := g.clearLines()
+	rows := g.fullRows()
+	cleared := len(rows)
 	result.Cleared = cleared
 	result.ClearedRows = rows
 	if result.TSpin {
@@ -199,8 +201,10 @@ func (g *Game) lockAndSpawn() LockResult {
 	if cleared > 0 {
 		g.Lines += cleared
 		g.Level = g.Lines / 10
+		g.pendingRows = append([]int{}, rows...)
+	} else {
+		g.spawnNext()
 	}
-	g.spawnNext()
 	g.resetLock()
 	g.lastRotate = false
 	return result
@@ -257,6 +261,66 @@ func (g *Game) clearLines() (int, []int) {
 		}
 	}
 	return cleared, rows
+}
+
+func (g *Game) clearRows(rows []int) {
+	if len(rows) == 0 {
+		return
+	}
+	rowsMap := make(map[int]struct{}, len(rows))
+	for _, row := range rows {
+		if row >= 0 && row < boardHeight {
+			rowsMap[row] = struct{}{}
+		}
+	}
+	if len(rowsMap) == 0 {
+		return
+	}
+	dst := boardHeight - 1
+	for src := boardHeight - 1; src >= 0; src-- {
+		if _, remove := rowsMap[src]; remove {
+			continue
+		}
+		if dst != src {
+			copy(g.Board[dst], g.Board[src])
+		}
+		dst--
+	}
+	for ; dst >= 0; dst-- {
+		for x := 0; x < boardWidth; x++ {
+			g.Board[dst][x] = 0
+		}
+	}
+}
+
+func (g *Game) fullRows() []int {
+	rows := []int{}
+	for y := boardHeight - 1; y >= 0; y-- {
+		full := true
+		for x := 0; x < boardWidth; x++ {
+			if g.Board[y][x] == 0 {
+				full = false
+				break
+			}
+		}
+		if full {
+			rows = append(rows, y)
+		}
+	}
+	return rows
+}
+
+func (g *Game) ResolveLineClear() {
+	if !g.hasPendingLineClear() {
+		return
+	}
+	g.clearRows(g.pendingRows)
+	g.pendingRows = nil
+	g.spawnNext()
+}
+
+func (g *Game) hasPendingLineClear() bool {
+	return len(g.pendingRows) > 0
 }
 
 func (g *Game) resetLock() {
