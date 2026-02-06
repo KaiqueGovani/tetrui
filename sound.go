@@ -23,6 +23,7 @@ const (
 	SoundMenuMove
 	SoundMenuSelect
 	SoundGameOver
+	SoundTSpin
 )
 
 type SoundEngine struct {
@@ -130,6 +131,12 @@ func tonesForEvent(event SoundEvent) []toneSpec {
 		return []toneSpec{{frequency: 520, duration: 70 * time.Millisecond, volume: 0.2}}
 	case SoundGameOver:
 		return []toneSpec{{frequency: 180, duration: 160 * time.Millisecond, volume: 0.28}}
+	case SoundTSpin:
+		return []toneSpec{
+			{frequency: 540, duration: 60 * time.Millisecond, volume: 0.3},
+			{frequency: 720, duration: 60 * time.Millisecond, volume: 0.3},
+			{frequency: 900, duration: 80 * time.Millisecond, volume: 0.3},
+		}
 	default:
 		return nil
 	}

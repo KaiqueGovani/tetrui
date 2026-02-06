@@ -8,6 +8,7 @@ import (
 const (
 	boardWidth  = 10
 	boardHeight = 20
+	lockDelay   = 500 * time.Millisecond
 )
 
 type Point struct {
@@ -16,22 +17,32 @@ type Point struct {
 }
 
 type Game struct {
-	Board    [][]int
-	X        int
-	Y        int
-	Rotation int
-	Current  int
-	Next     int
-	HoldKind int
-	HasHold  bool
-	CanHold  bool
-	Score    int
-	Lines    int
-	Level    int
-	Over     bool
-	Paused   bool
-	bag      []int
-	rng      *rand.Rand
+	Board      [][]int
+	X          int
+	Y          int
+	Rotation   int
+	Current    int
+	Next       int
+	HoldKind   int
+	HasHold    bool
+	CanHold    bool
+	Score      int
+	Lines      int
+	Level      int
+	Over       bool
+	Paused     bool
+	lockStart  time.Time
+	lastRotate bool
+	bag        []int
+	rng        *rand.Rand
+}
+
+type LockResult struct {
+	Locked      bool
+	Cleared     int
+	ScoreDelta  int
+	TSpin       bool
+	ClearedRows []int
 }
 
 func NewGame() Game {
@@ -68,6 +79,8 @@ func (g *Game) Move(dx int) bool {
 	}
 	if !g.collides(g.X+dx, g.Y, g.Rotation) {
 		g.X += dx
+		g.resetLock()
+		g.lastRotate = false
 		return true
 	}
 	return false
@@ -80,12 +93,14 @@ func (g *Game) SoftDrop() {
 	if !g.collides(g.X, g.Y+1, g.Rotation) {
 		g.Y++
 		g.Score++
+		g.resetLock()
+		g.lastRotate = false
 	}
 }
 
-func (g *Game) HardDrop() (bool, int) {
+func (g *Game) HardDrop() LockResult {
 	if g.Over || g.Paused {
-		return false, 0
+		return LockResult{}
 	}
 	distance := 0
 	for !g.collides(g.X, g.Y+1, g.Rotation) {
@@ -95,8 +110,9 @@ func (g *Game) HardDrop() (bool, int) {
 	if distance > 0 {
 		g.Score += distance * 2
 	}
-	cleared := g.lockAndSpawn()
-	return true, cleared
+	result := g.lockAndSpawn()
+	result.Locked = true
+	return result
 }
 
 func (g *Game) Rotate(dir int) {
@@ -106,12 +122,16 @@ func (g *Game) Rotate(dir int) {
 	newRot := (g.Rotation + dir + 4) % 4
 	if !g.collides(g.X, g.Y, newRot) {
 		g.Rotation = newRot
+		g.lastRotate = true
+		g.resetLock()
 		return
 	}
 	for _, dx := range []int{-1, 1, -2, 2} {
 		if !g.collides(g.X+dx, g.Y, newRot) {
 			g.X += dx
 			g.Rotation = newRot
+			g.lastRotate = true
+			g.resetLock()
 			return
 		}
 	}
@@ -132,32 +152,58 @@ func (g *Game) Hold() {
 		g.HoldKind = temp
 	}
 	g.spawn()
+	g.lastRotate = false
 	g.CanHold = false
 }
 
-func (g *Game) Step() (bool, int) {
+func (g *Game) Step() LockResult {
 	if g.Over || g.Paused {
-		return false, 0
+		return LockResult{}
 	}
 	if !g.collides(g.X, g.Y+1, g.Rotation) {
 		g.Y++
-		return false, 0
+		g.resetLock()
+		return LockResult{}
 	}
-	cleared := g.lockAndSpawn()
-	return true, cleared
+	if g.lockStart.IsZero() {
+		g.lockStart = time.Now()
+		return LockResult{}
+	}
+	if time.Since(g.lockStart) < lockDelay {
+		return LockResult{}
+	}
+	result := g.lockAndSpawn()
+	result.Locked = true
+	return result
 }
 
-func (g *Game) lockAndSpawn() int {
+func (g *Game) lockAndSpawn() LockResult {
+	result := LockResult{}
+	result.TSpin = g.isTSpin()
 	g.lockPiece()
-	cleared := g.clearLines()
-	if cleared > 0 {
+	cleared, rows := g.clearLines()
+	result.Cleared = cleared
+	result.ClearedRows = rows
+	if result.TSpin {
+		scoreTable := []int{400, 800, 1200, 1600}
+		if cleared >= 0 && cleared < len(scoreTable) {
+			result.ScoreDelta = scoreTable[cleared] * (g.Level + 1)
+		}
+	} else if cleared > 0 {
 		scoreTable := []int{0, 100, 300, 500, 800}
-		g.Score += scoreTable[cleared] * (g.Level + 1)
+		result.ScoreDelta = scoreTable[cleared] * (g.Level + 1)
+	}
+	if result.ScoreDelta > 0 {
+		g.Score += result.ScoreDelta
+	}
+	if cleared > 0 {
 		g.Lines += cleared
 		g.Level = g.Lines / 10
 	}
 	g.spawnNext()
-	return cleared
+	g.resetLock()
+	g.lastRotate = false
+	return result
 }
 
 func (g *Game) lockPiece() {
@@ -181,13 +227,15 @@ func (g *Game) spawn() {
 	g.Y = 0
 	g.Rotation = 0
 	g.CanHold = true
+	g.resetLock()
 	if g.collides(g.X, g.Y, g.Rotation) {
 		g.Over = true
 	}
 }
 
-func (g *Game) clearLines() int {
+func (g *Game) clearLines() (int, []int) {
 	cleared := 0
+	rows := []int{}
 	for y := boardHeight - 1; y >= 0; y-- {
 		full := true
 		for x := 0; x < boardWidth; x++ {
@@ -198,6 +246,7 @@ func (g *Game) clearLines() int {
 		}
 		if full {
 			cleared++
+			rows = append(rows, y)
 			for pull := y; pull > 0; pull-- {
 				copy(g.Board[pull], g.Board[pull-1])
 			}
@@ -207,7 +256,38 @@ func (g *Game) clearLines() int {
 			y++
 		}
 	}
-	return cleared
+	return cleared, rows
+}
+
+func (g *Game) resetLock() {
+	g.lockStart = time.Time{}
+}
+
+func (g *Game) isTSpin() bool {
+	if g.Current != 2 || !g.lastRotate {
+		return false
+	}
+	cx := g.X + 1
+	cy := g.Y + 1
+	corners := [][2]int{
+		{cx - 1, cy - 1},
+		{cx + 1, cy - 1},
+		{cx - 1, cy + 1},
+		{cx + 1, cy + 1},
+	}
+	filled := 0
+	for _, c := range corners {
+		x := c[0]
+		y := c[1]
+		if x < 0 || x >= boardWidth || y < 0 || y >= boardHeight {
+			filled++
+			continue
+		}
+		if g.Board[y][x] != 0 {
+			filled++
+		}
+	}
+	return filled >= 3
 }
 
 func (g *Game) collides(x, y, rotation int) bool {

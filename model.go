@@ -49,6 +49,13 @@ type Model struct {
 	syncLoading  bool
 	syncDots     int
 	music        *MusicPlayer
+	flashRows    []int
+	flashUntil   time.Time
+	lastDelta    int
+	lastEvent    string
+	lastEventTil time.Time
+	lastMoveDir  int
+	lastMoveAt   time.Time
 }
 
 func NewModel() Model {
@@ -89,14 +96,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tickMsg:
 		if m.screen == screenGame && !m.game.Paused && !m.game.Over {
-			locked, cleared := m.game.Step()
+			result := m.game.Step()
+			m.updateFlash()
 			if m.game.Over {
 				cmd := m.setScreen(screenNameEntry)
 				m.nameInput = ""
 				return m, cmd
 			}
 			cmds := []tea.Cmd{tickCmd(m.game.FallInterval())}
-			if event, ok := soundEventForAction(locked, cleared); ok && m.config.Sound {
+			if result.Locked {
+				m.applyScoreEvent(result)
+			}
+			if event, ok := soundEventForAction(result); ok && m.config.Sound {
 				cmds = append(cmds, playSound(m.sound, event))
 			}
 			return m, tea.Batch(cmds...)
@@ -204,9 +215,12 @@ func playSound(engine *SoundEngine, event SoundEvent) tea.Cmd {
 	}
 }
 
-func soundEventForAction(locked bool, cleared int) (SoundEvent, bool) {
-	if cleared > 0 {
-		switch cleared {
+func soundEventForAction(result LockResult) (SoundEvent, bool) {
+	if result.TSpin {
+		return SoundTSpin, true
+	}
+	if result.Cleared > 0 {
+		switch result.Cleared {
 		case 1:
 			return SoundLine1, true
 		case 2:
@@ -217,7 +231,7 @@ func soundEventForAction(locked bool, cleared int) (SoundEvent, bool) {
 			return SoundLine4, true
 		}
 	}
-	if locked {
+	if result.Locked {
 		return SoundLock, true
 	}
 	return SoundLock, false
@@ -345,37 +359,48 @@ func (m *Model) updateMenu(msg tea.KeyMsg) tea.Cmd {
 func (m *Model) updateGame(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "left", "h":
-		if m.game.Move(-1) && m.config.Sound {
-			return playSound(m.sound, SoundMove)
+		m.lastMoveDir = -1
+		m.lastMoveAt = time.Now()
+		if m.game.Move(-1) {
+			if m.config.Sound {
+				return playSound(m.sound, SoundMove)
+			}
 		}
 	case "right", "l":
-		if m.game.Move(1) && m.config.Sound {
-			return playSound(m.sound, SoundMove)
+		m.lastMoveDir = 1
+		m.lastMoveAt = time.Now()
+		if m.game.Move(1) {
+			if m.config.Sound {
+				return playSound(m.sound, SoundMove)
+			}
 		}
 	case "down", "j":
 		m.game.SoftDrop()
 	case " ":
-		locked, cleared := m.game.HardDrop()
+		result := m.game.HardDrop()
 		if m.game.Over {
 			cmd := m.setScreen(screenNameEntry)
 			m.nameInput = ""
 			return cmd
 		}
+		m.applyScoreEvent(result)
 		if m.config.Sound {
-			if cleared == 0 {
+			if result.Cleared == 0 && !result.TSpin {
 				return playSound(m.sound, SoundDrop)
 			}
-			if event, ok := soundEventForAction(locked, cleared); ok {
+			if event, ok := soundEventForAction(result); ok {
 				return playSound(m.sound, event)
 			}
 		}
 	case "up", "x":
 		m.game.Rotate(1)
+		m.applyMoveBuffer()
 		if m.config.Sound {
 			return playSound(m.sound, SoundRotate)
 		}
 	case "z":
 		m.game.Rotate(-1)
+		m.applyMoveBuffer()
 		if m.config.Sound {
 			return playSound(m.sound, SoundRotate)
 		}
@@ -583,4 +608,44 @@ var configItems = []string{
 	"Shadow",
 	"Game Scale",
 	"Score Sync",
+}
+
+func (m *Model) applyScoreEvent(result LockResult) {
+	if len(result.ClearedRows) > 0 {
+		m.flashRows = append([]int{}, result.ClearedRows...)
+		m.flashUntil = time.Now().Add(150 * time.Millisecond)
+	}
+	if result.ScoreDelta > 0 {
+		m.lastDelta = result.ScoreDelta
+		if result.TSpin {
+			m.lastEvent = "T-SPIN"
+		} else {
+			m.lastEvent = "LINE CLEAR"
+		}
+		m.lastEventTil = time.Now().Add(900 * time.Millisecond)
+	}
+}
+
+func (m *Model) updateFlash() {
+	if !m.flashUntil.IsZero() && time.Now().After(m.flashUntil) {
+		m.flashRows = nil
+		m.flashUntil = time.Time{}
+	}
+	if !m.lastEventTil.IsZero() && time.Now().After(m.lastEventTil) {
+		m.lastEvent = ""
+		m.lastDelta = 0
+		m.lastEventTil = time.Time{}
+	}
+}
+
+func (m *Model) applyMoveBuffer() {
+	if m.lastMoveDir == 0 {
+		return
+	}
+	if time.Since(m.lastMoveAt) > 140*time.Millisecond {
+		return
+	}
+	if m.game.Move(m.lastMoveDir) && m.config.Sound {
+		_ = playSound(m.sound, SoundMove)
+	}
 }
