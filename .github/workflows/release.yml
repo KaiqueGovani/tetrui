@@ -46,7 +46,7 @@ jobs:
           if [ "$GOOS" = "windows" ]; then
             EXT=".exe"
           fi
-          go build -ldflags "-X main.defaultScoreAPIURL=${TETRUI_SCORE_API_URL} -X main.defaultScoreAPIKey=${TETRUI_SCORE_API_KEY}" -o "dist/tetrui-${GOOS}-${GOARCH}${EXT}" .
+          go build -trimpath -buildvcs=false -ldflags "-s -w -X main.defaultScoreAPIURL=${TETRUI_SCORE_API_URL} -X main.defaultScoreAPIKey=${TETRUI_SCORE_API_KEY}" -o "dist/tetrui-${GOOS}-${GOARCH}${EXT}" .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
