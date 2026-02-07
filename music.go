@@ -13,10 +13,10 @@ import (
 	"github.com/llehouerou/go-mp3"
 )
 
-//go:embed tetris-theme-korobeiniki.mp3
+//go:embed assets/audio/tetris-theme-korobeiniki.mp3
 var musicFS embed.FS
 
-const musicFile = "tetris-theme-korobeiniki.mp3"
+const musicFile = "assets/audio/tetris-theme-korobeiniki.mp3"
 
 type MusicMode int
 

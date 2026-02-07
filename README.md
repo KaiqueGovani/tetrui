@@ -4,11 +4,11 @@ Terminal-based falling-blocks tribute game with a focused TUI, local and synced 
 
 > This project is **not related to Tetris**. It is a grand tribute to the original game.
 
-![Gameplay](tetrui%20gameplay%20image.png)
+![Gameplay](docs/media/tetrui-gameplay.png)
 
 ## Demo
 
-![TetrUI Demo](tetrui%20demo.gif)
+![TetrUI Demo](docs/media/tetrui-demo.gif)
 
 ## Install
 
@@ -47,6 +47,13 @@ go build -o tetrui
 - Local scores + optional sync (n8n webhook)
 - Music loop in menu and full loop during gameplay
 - Resize-safe layout for small terminals
+
+## Built With
+
+- [Bubble Tea](https://github.com/charmbracelet/bubbletea) - terminal UI framework
+- [Lip Gloss](https://github.com/charmbracelet/lipgloss) - terminal styling
+- [oto](https://github.com/ebitengine/oto) - low-level audio output
+- [go-mp3](https://github.com/llehouerou/go-mp3) - MP3 decoding
 
 ## Music Credits
 
