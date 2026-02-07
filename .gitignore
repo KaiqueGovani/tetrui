@@ -1,6 +1,9 @@
 # Compiled binary
 tetrui
 
+# Ignore tetrui directory
+!tetrui/
+
 # Go build artifacts
 *.exe
 *.exe~
