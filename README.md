@@ -27,7 +27,7 @@ iex (iwr "https://raw.githubusercontent.com/KaiqueGovani/tetrui/master/install.p
 ### Local build
 
 ```bash
-go build -o tetrui
+go build -o tetrui ./cmd/tetrui
 ./tetrui
 ```
 
