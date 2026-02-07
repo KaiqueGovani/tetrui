@@ -7,6 +7,10 @@ Terminal-based falling-blocks tribute game with a focused TUI, local and synced 
 ![Main Menu](docs/images/menu-placeholder.png)
 ![Gameplay](docs/images/gameplay-placeholder.png)
 
+## Demo
+
+![TetrUI Demo](tetrui%20demo.gif)
+
 ## Install
 
 ### Quick install (curl)
