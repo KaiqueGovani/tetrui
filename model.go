@@ -78,11 +78,15 @@ type Model struct {
 
 func NewModel() Model {
 	config, _ := loadConfig()
-	scores, _ := loadScores()
 	index := themeIndexByName(config.Theme)
 	if index < 0 {
 		index = 0
 		config.Theme = themes[index].Name
+	}
+	sync := NewScoreSyncFromEnv(config.Sync)
+	scores := []ScoreEntry{}
+	if sync == nil || !sync.Enabled() {
+		scores, _ = loadScores()
 	}
 	ctx, sampleRate, err := initAudioContext()
 	if err != nil {
@@ -97,7 +101,7 @@ func NewModel() Model {
 		themeIndex: index,
 		game:       NewGame(),
 		sound:      sound,
-		sync:       NewScoreSyncFromEnv(config.Sync),
+		sync:       sync,
 		music:      NewMusicPlayer(ctx, sampleRate, volumeFromPercent(config.Volume), config.Music),
 	}
 }
@@ -212,10 +216,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.syncWarning = ""
 		}
-		if len(msg.scores) > 0 {
-			m.scores = mergeScores(m.scores, msg.scores)
-			_ = saveScores(m.scores)
-		}
+		m.scores = msg.scores
 		m.syncLoading = false
 		return m, nil
 	case scoreUploadedMsg:
@@ -725,8 +726,10 @@ func (m *Model) updateNameEntry(msg tea.KeyMsg) tea.Cmd {
 			Level: m.game.Level,
 			When:  time.Now().Format("2006-01-02 15:04"),
 		}
-		m.scores = insertScore(m.scores, entry)
-		_ = saveScores(m.scores)
+		if m.sync == nil || !m.sync.Enabled() {
+			m.scores = insertScore(m.scores, entry)
+			_ = saveScores(m.scores)
+		}
 		m.scoresOffset = 0
 		cmd := m.setScreen(screenScores)
 		var cmds []tea.Cmd
