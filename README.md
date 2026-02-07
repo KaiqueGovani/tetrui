@@ -4,8 +4,7 @@ Terminal-based falling-blocks tribute game with a focused TUI, local and synced 
 
 > This project is **not related to Tetris**. It is a grand tribute to the original game.
 
-![Main Menu](docs/images/menu-placeholder.png)
-![Gameplay](docs/images/gameplay-placeholder.png)
+![Gameplay](tetrui%20gameplay%20image.png)
 
 ## Demo
 
