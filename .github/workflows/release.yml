@@ -51,6 +51,7 @@ jobs:
             # Set up cross-compilation for ARM64
             sudo dpkg --add-architecture arm64
             tmpfile=$(mktemp)
+            trap 'rm -f "$tmpfile"' EXIT
             sudo awk '
               /^$/ {
                 if (in_block && !has_arch) {
@@ -71,7 +72,8 @@ jobs:
               }
             ' /etc/apt/sources.list.d/ubuntu.sources | sudo tee "$tmpfile" > /dev/null
             sudo install -m 644 "$tmpfile" /etc/apt/sources.list.d/ubuntu.sources
-            sudo rm "$tmpfile"
+            trap - EXIT
+            rm -f "$tmpfile"
             cat <<EOF | sudo tee /etc/apt/sources.list.d/ubuntu-arm64.sources
 Types: deb
 URIs: http://ports.ubuntu.com/ubuntu-ports
