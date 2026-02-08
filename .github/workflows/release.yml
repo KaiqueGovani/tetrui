@@ -50,9 +50,17 @@ jobs:
           if [ "${{ matrix.goarch }}" = "arm64" ]; then
             # Set up cross-compilation for ARM64
             sudo dpkg --add-architecture arm64
-            sudo sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list
-            echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -sc) main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
-            echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -sc)-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+            if ! grep -q '^Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources; then
+              sudo sed -i '/^URIs:/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources
+            fi
+            cat <<EOF | sudo tee /etc/apt/sources.list.d/ubuntu-arm64.sources
+Types: deb
+URIs: http://ports.ubuntu.com/ubuntu-ports
+Suites: $(lsb_release -sc) $(lsb_release -sc)-updates $(lsb_release -sc)-security
+Components: main restricted universe multiverse
+Architectures: arm64
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOF
             sudo apt-get update
             sudo apt-get install -y gcc-aarch64-linux-gnu pkg-config
             sudo apt-get install -y libasound2-dev:arm64
