@@ -50,6 +50,7 @@ jobs:
           if [ "${{ matrix.goarch }}" = "arm64" ]; then
             # Set up cross-compilation for ARM64
             sudo dpkg --add-architecture arm64
+            tmpfile=$(mktemp)
             sudo awk '
               /^$/ {
                 if (in_block && !has_arch) {
@@ -68,7 +69,9 @@ jobs:
                   print "Architectures: amd64"
                 }
               }
-            ' /etc/apt/sources.list.d/ubuntu.sources | sudo tee /etc/apt/sources.list.d/ubuntu.sources
+            ' /etc/apt/sources.list.d/ubuntu.sources | sudo tee "$tmpfile" > /dev/null
+            sudo install -m 644 "$tmpfile" /etc/apt/sources.list.d/ubuntu.sources
+            sudo rm "$tmpfile"
             cat <<EOF | sudo tee /etc/apt/sources.list.d/ubuntu-arm64.sources
 Types: deb
 URIs: http://ports.ubuntu.com/ubuntu-ports
