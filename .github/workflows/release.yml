@@ -51,7 +51,6 @@ jobs:
             # Set up cross-compilation for ARM64
             sudo dpkg --add-architecture arm64
             tmpfile=$(mktemp)
-            trap 'rm -f "$tmpfile"' EXIT
             sudo awk '
               /^$/ {
                 if (in_block && !has_arch) {
@@ -73,7 +72,6 @@ jobs:
             ' /etc/apt/sources.list.d/ubuntu.sources | sudo tee "$tmpfile" > /dev/null
             sudo install -m 644 "$tmpfile" /etc/apt/sources.list.d/ubuntu.sources
             rm -f "$tmpfile"
-            trap - EXIT
             suite=$(lsb_release -sc)
             printf "Types: deb\nURIs: http://ports.ubuntu.com/ubuntu-ports\nSuites: %s %s-updates\nComponents: main restricted universe multiverse\nArchitectures: arm64\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n" "$suite" "$suite" | sudo tee /etc/apt/sources.list.d/ubuntu-ports-arm64.sources
             sudo apt-get update
