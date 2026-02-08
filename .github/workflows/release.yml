@@ -50,9 +50,25 @@ jobs:
           if [ "${{ matrix.goarch }}" = "arm64" ]; then
             # Set up cross-compilation for ARM64
             sudo dpkg --add-architecture arm64
-            if ! grep -q '^Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources; then
-              sudo sed -i '/^URIs:/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources
-            fi
+            sudo awk '
+              /^$/ {
+                if (in_block && !has_arch) {
+                  print "Architectures: amd64"
+                }
+                in_block = 0
+                has_arch = 0
+                print
+                next
+              }
+              /^URIs:/ { in_block = 1 }
+              /^Architectures:/ { has_arch = 1 }
+              { print }
+              END {
+                if (in_block && !has_arch) {
+                  print "Architectures: amd64"
+                }
+              }
+            ' /etc/apt/sources.list.d/ubuntu.sources | sudo tee /etc/apt/sources.list.d/ubuntu.sources
             cat <<EOF | sudo tee /etc/apt/sources.list.d/ubuntu-arm64.sources
 Types: deb
 URIs: http://ports.ubuntu.com/ubuntu-ports
