@@ -56,7 +56,7 @@ jobs:
             cat <<EOF | sudo tee /etc/apt/sources.list.d/ubuntu-arm64.sources
 Types: deb
 URIs: http://ports.ubuntu.com/ubuntu-ports
-            Suites: $(lsb_release -sc) $(lsb_release -sc)-updates
+Suites: $(lsb_release -sc) $(lsb_release -sc)-updates
 Components: main restricted universe multiverse
 Architectures: arm64
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
