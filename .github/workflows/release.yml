@@ -99,8 +99,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          GOOS=${{ matrix.goos }}
-          GOARCH=${{ matrix.goarch }}
+          export GOOS=${{ matrix.goos }}
+          export GOARCH=${{ matrix.goarch }}
           echo "GOOS=$GOOS" >> $GITHUB_ENV
           echo "GOARCH=$GOARCH" >> $GITHUB_ENV
           EXT=""
