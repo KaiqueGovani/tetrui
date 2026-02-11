@@ -50,8 +50,8 @@ jobs:
           if [ "${{ matrix.goarch }}" = "arm64" ]; then
             # Set up cross-compilation for ARM64
             sudo dpkg --add-architecture arm64
-            tmpfile=$(mktemp)
-            trap 'rm -f "$tmpfile"' EXIT
+            tmpfile=$(sudo mktemp)
+            trap 'sudo rm -f "$tmpfile"' EXIT
             sudo awk '
               /^$/ {
                 if (in_block && !has_arch) {
